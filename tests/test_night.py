@@ -16,7 +16,7 @@ from llmsleep.arms import ARMS, ArmConfig, get_arm
 from llmsleep.config import CommitConfig, NightConfig, TeacherConfig, TrainConfig, derive_seed, make_generator
 from llmsleep.delta import COMMITTED, DeltaModel
 from llmsleep.handle import ModelHandle
-from llmsleep.ledger import ComputeLedger
+from llmsleep.ledger import ComputeLedger, LedgerExhausted
 from llmsleep.memory import Episode, EpisodicStore
 from llmsleep.phases.commit import AuditItem, decide, measure_drift, measure_gaps, update_episodes
 from llmsleep.phases.consolidate import (
@@ -32,6 +32,7 @@ from llmsleep.phases.night import SleepPressure, State, active_stage_fractions, 
 from llmsleep.phases.queries import (
     Candidate,
     ModelQueryGen,
+    PairQueryGen,
     TemplateQueryGen,
     WorldLike,
     generate_singles,
@@ -477,6 +478,163 @@ def test_model_query_gen_is_charged_and_returns_strings(tokenizer, world):
     queries = gen.generate(world.episodes(0)[:1], torch.Generator().manual_seed(0))
     assert all(isinstance(q, str) for q in queries)
     assert ledger.unmetered_forward > 0
+
+
+def _pair_store(old: int, new: int) -> EpisodicStore:
+    store = EpisodicStore()
+    for i in range(old):
+        store.add(Episode(f"o{i}", f"Old {i}.", 0, entities=["Hub"]))
+    for i in range(new):
+        store.add(Episode(f"n{i}", f"New {i}.", 1, entities=["Hub"]))
+    return store
+
+
+class _EchoGen:
+    def __init__(self, fail_after: int | None = None) -> None:
+        self.calls = 0
+        self.fail_after = fail_after
+
+    def generate(self, episodes, generator):
+        if self.fail_after is not None and self.calls >= self.fail_after:
+            raise LedgerExhausted("synthesis", 1, 0)
+        self.calls += 1
+        return ["Q " + "+".join(e.id for e in episodes) + "?"]
+
+
+def test_pair_choice_prefers_links_across_nights():
+    gen = PairQueryGen(_EchoGen(), max_pairs=3)
+    candidates, exhausted = gen.generate(_pair_store(4, 2), {"n0", "n1"}, torch.Generator().manual_seed(1))
+    assert not exhausted and len(candidates) == 3
+    for candidate in candidates:  # Eight cross-night pairs compete for three places; n0+n1 must not get one.
+        assert sum(episode_id.startswith("o") for episode_id in candidate.episode_ids) == 1
+    assert gen.stats == {"available": 9, "cross_night_available": 8, "chosen": 3, "cross_night_chosen": 3}
+    # Old episodes pair only through a new one, and same-night pairs fill the places that remain.
+    gen = PairQueryGen(_EchoGen(), max_pairs=9)
+    candidates, _ = gen.generate(_pair_store(4, 2), {"n0", "n1"}, torch.Generator().manual_seed(1))
+    assert len(candidates) == 9 and candidates[-1].episode_ids == ("n0", "n1")
+
+
+def test_pair_choice_samples_rather_than_truncates():
+    def chosen(seed: int) -> list[tuple[str, ...]]:
+        candidates, _ = PairQueryGen(_EchoGen(), max_pairs=2).generate(
+            _pair_store(0, 6), {f"n{i}" for i in range(6)}, torch.Generator().manual_seed(seed)
+        )
+        return [c.episode_ids for c in candidates]
+
+    assert chosen(3) == chosen(3)  # Seeded.
+    seen = {tuple(chosen(seed)) for seed in range(200)}
+    assert len(seen) > 1
+    # Sorted truncation would always give the same two; sampling reaches the end of the sort as well.
+    assert any(("n4", "n5") in picks for picks in seen)
+
+
+def test_pair_exhaustion_keeps_the_cross_night_pairs_already_done():
+    gen = PairQueryGen(_EchoGen(fail_after=1), max_pairs=5)
+    candidates, exhausted = gen.generate(_pair_store(2, 2), {"n0", "n1"}, torch.Generator().manual_seed(2))
+    assert exhausted and len(candidates) == 1
+    assert sum(episode_id.startswith("o") for episode_id in candidates[0].episode_ids) == 1
+
+
+def test_a_night_reports_its_pair_choice(tokenizer, world):
+    cfg = _select_all_config()
+    report = run_night(fresh_gpt2_state(cfg, world, tokenizer), cfg)
+    assert report.synthesis["pairs"]["available"] >= report.synthesis["pairs"]["chosen"] > 0
+
+
+def test_train_loop_records_only_episodes_in_completed_steps(tokenizer):
+    handle = ModelHandle(DeltaModel(tiny_gpt2(tokenizer.vocab_size), rank=2), tokenizer, "cpu")
+    hard = hard_examples(handle, [Episode(i, f"Text of {i}.", 0) for i in "abc"])
+    result = train_loop(handle, hard, [], [], TrainConfig(hard_batch=1), torch.Generator().manual_seed(1), max_steps=1)
+    assert result.steps == 1 and len(result.trained_episode_ids) == 1
+    json.dumps(result.summary())
+    assert result.summary()["trained_episode_ids"] == sorted(result.trained_episode_ids)
+
+
+def test_a_step_dropped_mid_accumulation_teaches_nothing(tokenizer):
+    ledger = ComputeLedger()
+    ledger.begin_night(17, {"train": 1.0})
+    handle = ModelHandle(DeltaModel(tiny_gpt2(tokenizer.vocab_size), rank=2), tokenizer, "cpu", ledger)
+    # Each example: start token + 4 characters + EOS = 6 tokens, so 12 charged. The second micro-batch cannot pay.
+    hard = hard_examples(handle, [Episode("a", "aaaa", 0), Episode("b", "bbbb", 0)])
+    with ledger.stage("train"):
+        result = train_loop(
+            handle, hard, [], [], TrainConfig(hard_batch=1, accum_steps=2), torch.Generator().manual_seed(1)
+        )
+    assert result.exhausted and result.steps == 0 and result.trained_episode_ids == set()
+
+
+def test_integrate_targets_credit_their_episodes_and_anchors_do_not(tokenizer):
+    handle = ModelHandle(DeltaModel(tiny_gpt2(tokenizer.vocab_size), rank=2), tokenizer, "cpu", batch_size=4)
+    cfg = TeacherConfig(samples=1, max_new_tokens=2, top_k=4)
+    generator = torch.Generator().manual_seed(1)
+    integrate, _ = build_targets(handle, [TargetSpec("Who?", "ctx", "committed", "integrate", ("taught",))], cfg, generator)
+    anchor, _ = build_targets(handle, [TargetSpec("What?", None, "germline", "anchor")], cfg, generator)
+    assert integrate[0].episode_ids == ("taught",)
+    result = train_loop(
+        handle, [], integrate, anchor, TrainConfig(kl_batch=1, anchor_batch=1), generator, max_steps=1
+    )
+    assert result.trained_episode_ids == {"taught"}
+
+
+def test_only_episodes_that_received_steps_are_marked_consolidated(tokenizer, world):
+    cfg = small_config(get_arm("B3_replay"))
+    cfg.train = TrainConfig(hard_batch=1, max_steps=1)  # One example, from one of the night's two episodes.
+    state = fresh_gpt2_state(cfg, world, tokenizer)
+    report = run_night(state, cfg)
+    marked = [e.id for e in state.store.all_real() if e.meta.get("consolidated_night") is not None]
+    assert len(state.store) == 2 and len(marked) == 1
+    assert report.episodes_trained == 1 and report.episodes_marked_consolidated == 1
+    assert report.train["trained_episode_ids"] == marked
+
+
+def test_no_budget_means_nothing_is_marked_consolidated(tokenizer, world):
+    cfg = small_config(get_arm("B3_replay"), night_tokens=0)
+    state = fresh_gpt2_state(cfg, world, tokenizer)
+    report = run_night(state, cfg)
+    assert report.decision["accepted"] and report.train["exhausted"]
+    assert report.episodes_trained == 0 and report.episodes_marked_consolidated == 0
+    assert all("consolidated_night" not in e.meta for e in state.store.all_real())
+
+
+def test_an_episode_keeps_the_night_it_was_first_consolidated(tokenizer, world):
+    cfg = small_config(get_arm("B3_replay"))  # Four steps of two examples: every example, both episodes.
+    state = fresh_gpt2_state(cfg, world, tokenizer)
+    first = run_night(state, cfg)
+    assert first.episodes_marked_consolidated == 2
+    cfg.train = TrainConfig(hard_batch=2, max_steps=20)
+    second = run_night(state, cfg)
+    assert second.episodes_trained == 4 and second.episodes_marked_consolidated == 2
+    assert state.store.get("n0-e0").meta["consolidated_night"] == 0
+    assert state.store.get("n1-e0").meta["consolidated_night"] == 1
+
+
+def test_create_passes_stop_tokens_to_the_handle(tokenizer, world):
+    cfg = small_config(get_arm("B3_replay"))
+    state = State.create(tiny_gpt2(tokenizer.vocab_size), tokenizer, world, 7, cfg, "cpu", [tokenizer.eos_token_id, 9])
+    assert state.handle.eos_ids == {tokenizer.eos_token_id, 9}
+    assert fresh_gpt2_state(cfg, world, tokenizer).handle.eos_ids == {tokenizer.eos_token_id}
+
+
+def test_exempt_counters_survive_a_checkpoint_so_reports_match_after_resume(tokenizer, tmp_path):
+    cfg = small_config(get_arm("B2_seq"))
+
+    def evaluate(state: State) -> None:
+        with state.ledger.exempt():
+            state.ledger.charge(forward=11, backward=2)
+
+    straight = fresh_gpt2_state(cfg, TinyWorld(), tokenizer)
+    run_night(straight, cfg)
+    evaluate(straight)
+    expected = run_night(straight, cfg)
+    assert expected.ledger["exempt_forward"] == 11 and expected.ledger["exempt_backward"] == 2
+
+    first = fresh_gpt2_state(cfg, TinyWorld(), tokenizer)
+    run_night(first, cfg)
+    evaluate(first)
+    first.save(str(tmp_path))
+    resumed = State.load(str(tmp_path), fresh_gpt2_state(cfg, TinyWorld(), tokenizer).handle, TinyWorld())
+    assert resumed.ledger.exempt_forward == 11 and resumed.ledger.exempt_backward == 2
+    assert run_night(resumed, cfg).to_dict() == expected.to_dict()
 
 
 def test_tiny_world_satisfies_the_protocol(world):

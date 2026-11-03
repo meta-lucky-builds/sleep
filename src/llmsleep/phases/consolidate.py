@@ -20,7 +20,7 @@ is still penalised here through q'(*).
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import AbstractSet, Optional, Sequence
 
 import torch
@@ -73,6 +73,7 @@ class TokenTargets:
     top_logp: Tensor  # (L, k), CPU
     res_logp: Tensor  # (L,), CPU
     kind: str
+    episode_ids: tuple[str, ...] = ()  # Episodes this teaches; empty for anchors, which only hold things still.
 
 
 @dataclass
@@ -81,6 +82,7 @@ class HardExample:
 
     prompt_ids: list[int]
     cont_ids: list[int]
+    episode_ids: tuple[str, ...] = ()
 
 
 @dataclass
@@ -91,6 +93,7 @@ class TargetSpec:
     teacher_context: Optional[str]
     teacher_banks: BankSpec
     kind: str
+    episode_ids: tuple[str, ...] = ()
 
 
 def _targets_from_samples(
@@ -100,6 +103,7 @@ def _targets_from_samples(
     continuations: list[list[int]],
     top_k: int,
     kind: str,
+    episode_ids: tuple[str, ...] = (),
 ) -> list[TokenTargets]:
     out: list[TokenTargets] = []
     prompts = [teacher_prompt] * len(continuations)
@@ -117,6 +121,7 @@ def _targets_from_samples(
                     top_logp[cursor : cursor + length].cpu(),
                     res_logp[cursor : cursor + length].cpu(),
                     kind,
+                    episode_ids,
                 )
             )
             cursor += length
@@ -150,6 +155,7 @@ def build_targets(
                         [s.token_ids for s in samples],
                         cfg.top_k,
                         spec.kind,
+                        spec.episode_ids,
                     )
                 )
         except LedgerExhausted:
@@ -186,10 +192,11 @@ def hard_examples(
         for text in [episode.text] + list(episode.meta.get("statements", [])):
             ids = handle.encode_continuation(text)
             if ids:
-                out.append(HardExample(start, ids + eos))
+                out.append(HardExample(start, ids + eos, (episode.id,)))
         for query, answer in episode.meta.get("qa", []):
             if normalize_query(query) not in exclude_queries:
-                out.append(HardExample(handle.encode_prompt(handle.format(query, None)), handle.encode_answer(answer)))
+                prompt = handle.encode_prompt(handle.format(query, None))
+                out.append(HardExample(prompt, handle.encode_answer(answer), (episode.id,)))
     return out
 
 
@@ -228,9 +235,10 @@ class TrainResult:
     loss_hard: float = 0.0  # Means over the last completed step.
     loss_kl: float = 0.0
     loss_anchor: float = 0.0
+    trained_episode_ids: set[str] = field(default_factory=set)  # In at least one completed optimizer step.
 
     def summary(self) -> dict:
-        return dict(self.__dict__)
+        return {**self.__dict__, "trained_episode_ids": sorted(self.trained_episode_ids)}
 
 
 def compute_loss(
@@ -328,14 +336,11 @@ def train_loop(
                 optimizer.zero_grad(set_to_none=True)
                 finite = True
                 totals = {"hard": 0.0, "kl": 0.0, "anchor": 0.0}
+                taught: set[str] = set()
                 for _ in range(cfg.accum_steps):
-                    loss, parts = compute_loss(
-                        handle,
-                        hard_pool.draw(cfg.hard_batch),
-                        kl_pool.draw(cfg.kl_batch),
-                        anchor_pool.draw(cfg.anchor_batch),
-                        cfg,
-                    )
+                    hard_rows = hard_pool.draw(cfg.hard_batch)
+                    kl_rows = kl_pool.draw(cfg.kl_batch)
+                    loss, parts = compute_loss(handle, hard_rows, kl_rows, anchor_pool.draw(cfg.anchor_batch), cfg)
                     if not torch.isfinite(loss):
                         finite = False
                         break
@@ -343,6 +348,8 @@ def train_loop(
                     (scaler.scale(scaled) if scaler is not None else scaled).backward()
                     for key, value in parts.items():
                         totals[key] += value / cfg.accum_steps
+                    for row in list(hard_rows) + list(kl_rows):
+                        taught.update(row.episode_ids)
                 if not finite:
                     result.nonfinite_steps += 1
                     continue
@@ -350,12 +357,17 @@ def train_loop(
                     scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(parameters, cfg.max_grad_norm)
                 if scaler is not None:
+                    scale_before = scaler.get_scale()
                     scaler.step(optimizer)
                     scaler.update()
+                    if scaler.get_scale() < scale_before:  # The scaler found inf gradients and skipped the step.
+                        result.nonfinite_steps += 1
+                        continue
                 else:
                     optimizer.step()
                 delta.bump_version()
                 result.steps += 1
+                result.trained_episode_ids |= taught
                 result.loss_hard, result.loss_kl, result.loss_anchor = totals["hard"], totals["kl"], totals["anchor"]
         except LedgerExhausted:
             result.exhausted = True

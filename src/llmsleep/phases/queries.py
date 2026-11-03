@@ -54,6 +54,7 @@ class Candidate:
     is_pair: bool = False
     context: str = ""
     distractor: Optional[str] = None
+    context_ids: tuple[str, ...] = ()  # Episodes in `context`; under real retrieval, not always the source's.
 
 
 def normalize_query(query: str) -> str:
@@ -121,20 +122,45 @@ class ModelQueryGen:
         return dedupe(queries)[: self.cfg.per_episode]
 
 
+def choose_pairs(
+    pairs: Sequence[tuple[Episode, Episode]], max_pairs: int, generator: torch.Generator
+) -> list[tuple[Episode, Episode]]:
+    """Pairs linked across different nights first, then same-night ones, uniformly at random within each group.
+
+    A cross-night pair is the one thing no single night's text can teach, and two-hop probes need it. Cutting a
+    sorted list would instead drop pairs by the accident of their ids, which would bias H7.
+    """
+
+    def shuffled(group: list[tuple[Episode, Episode]]) -> list[tuple[Episode, Episode]]:
+        return [group[i] for i in torch.randperm(len(group), generator=generator).tolist()]
+
+    cross = [(a, b) for a, b in pairs if a.night != b.night]
+    same = [(a, b) for a, b in pairs if a.night == b.night]
+    return (shuffled(cross) + shuffled(same))[:max_pairs]
+
+
 class PairQueryGen:
     """Queries over two episodes sharing an entity, since composition needs co-occurrence (T2 finding 4)."""
 
     def __init__(self, base: QueryGen, max_pairs: int) -> None:
         self.base = base
         self.max_pairs = max_pairs
+        self.stats: dict[str, int] = {}  # Of the last call: pairs available and chosen, overall and cross-night.
 
     def generate(
         self, store: EpisodicStore, new_ids: AbstractSet[str], generator: torch.Generator
     ) -> tuple[list[Candidate], bool]:
         """Pairs with at least one new episode. Returns (candidates so far, exhausted)."""
         pairs = [(a, b) for a, b in store.pairs_sharing_entity() if a.id in new_ids or b.id in new_ids]
+        chosen = choose_pairs(pairs, self.max_pairs, generator)
+        self.stats = {
+            "available": len(pairs),
+            "cross_night_available": sum(1 for a, b in pairs if a.night != b.night),
+            "chosen": len(chosen),
+            "cross_night_chosen": sum(1 for a, b in chosen if a.night != b.night),
+        }
         out: list[Candidate] = []
-        for a, b in pairs[: self.max_pairs]:
+        for a, b in chosen:
             try:
                 queries = self.base.generate([a, b], generator)
             except LedgerExhausted:

@@ -145,14 +145,45 @@ def test_a_record_has_everything_the_design_asks_for(straight_run):
     assert [r["night"] for r in records] == [0, 1]
     for record in records:
         assert record["config_hash"] and record["code_hash"] == "code-1" and record["world_fingerprint"]
-        assert record["ledger"]["spent"] <= 40000 and "exempt_forward" not in record["ledger"]
-        assert "exempt_forward" not in record["report"]["ledger"]
+        assert record["ledger"]["spent"] <= 40000
+        assert record["report"]["ledger"] == record["ledger"]
         assert record["eval_tokens"] > 0
         assert record["decision"]["accepted"] is True
         metrics = record["metrics"]
         for name in ("acq_direct", "false_recall", "drift_generic", "delta_norm", "delta_rank", "style_length", "ret_real_n"):
             assert name in metrics, name
     assert "entrench_pairs" in records[1]["metrics"] and "entrench_pairs" not in records[0]["metrics"]
+
+
+def test_exempt_counters_hold_evaluation_only_and_are_in_the_record(straight_run):
+    """Each night's report is written before its evaluation, so it holds the earlier nights' tokens. Setup
+    (capability, drift probe) is not counted: its cost depends on the disk cache, so it would differ on resume."""
+    first, second = runner.read_results(straight_run / "results.jsonl")
+    assert first["ledger"]["exempt_forward"] + first["ledger"]["exempt_backward"] == 0
+    assert second["ledger"]["exempt_forward"] + second["ledger"]["exempt_backward"] == first["eval_tokens"]
+
+
+def test_stop_tokens_join_tokenizer_and_generation_config(tmp_path):
+    config = smoke_config()
+    cell = only_cell(config)
+    night_cfg = NightConfig.from_dict({"arm": cell.arm, **config["night"]})
+    world = runner.SyntheticWorld(WorldConfig(**config["world"]), cell.seed)
+
+    def several(model_id, fp16):
+        model, tok = factory(model_id, fp16)
+        model.generation_config.eos_token_id = [tok.eos_token_id, 7]
+        return model, tok
+
+    def scalar(model_id, fp16):
+        model, tok = factory(model_id, fp16)
+        model.generation_config.eos_token_id = 9
+        return model, tok
+
+    tokenizer_eos = TinyTokenizer().eos_token_id
+    state = runner._prepare_state(night_cfg, cell, world, several, "cpu")
+    assert state.handle.eos_ids == {tokenizer_eos, 7}
+    state = runner._prepare_state(night_cfg, cell, world, scalar, "cpu")
+    assert state.handle.eos_ids == {tokenizer_eos, 9}
 
 
 def test_capability_cache_is_shared_on_disk(straight_run):
@@ -224,24 +255,27 @@ def test_confirmatory_config_with_capped_steps_is_refused():
 # ---- E4: entrenchment on checkpoints ---------------------------------------------------------------------
 
 
-def test_eval_checkpoints_mode_reads_a_finished_run(straight_run, tmp_path):
-    source = straight_run
-    while source.name != "tiny__gpt2":
-        source = source.parent
+def test_eval_checkpoints_mode_reads_a_finished_run(tmp_path):
+    # Enough steps and tokens that replay reaches every episode, which is what marks a fact consolidated.
+    source_config = smoke_config()
+    source_config["night"]["train"]["max_steps"] = 200
+    source_config["night"]["budget"]["night_tokens"] = 400000
+    source = tmp_path / "source"
+    run_cell(source_config, source)
     config = {
         "experiment": "E4",
         "seed_role": "smoke",
         "mode": "eval_checkpoints",
-        "source_out": str(source.parent),
+        "source_out": str(source),
         "model_ids": ["tiny/gpt2"],
         "world_seeds": [3],
         "arms": ["B3_replay"],
         "eval": {"max_new_tokens": 3, "batch_size": 8, "entrench_max": 2},
     }
-    dirs = runner.run_experiment(config, tmp_path, factory, None, "code-1", "cpu")
+    dirs = runner.run_experiment(config, tmp_path / "out", factory, None, "code-1", "cpu")
     record = runner.read_results(dirs[0] / "results.jsonl")[0]
     assert record["night"] == 1 and "entrench_pairs" in record["metrics"]
-    assert record["metrics"]["entrench_pairs"] == 2  # B3 consolidates everything.
+    assert record["metrics"]["entrench_pairs"] == 2  # With these steps, B3 reaches everything.
 
 
 # ---- configs --------------------------------------------------------------------------------------------

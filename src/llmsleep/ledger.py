@@ -82,6 +82,11 @@ class ComputeLedger:
         finally:
             self._exempt_depth -= 1
 
+    def restore_exempt(self, forward: int, backward: int) -> None:
+        """Set the exempt counters: from a checkpoint, or back to before per-process setup work."""
+        self.exempt_forward = int(forward)
+        self.exempt_backward = int(backward)
+
     def close_stage(self, name: str) -> None:
         """No more spend in `name`. Its unused tokens go to open stages, in proportion to their fractions."""
         if name in self._closed:

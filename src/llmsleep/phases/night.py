@@ -84,8 +84,12 @@ class State:
         world_seed: int,
         cfg: NightConfig,
         device: Union[str, torch.device] = "cpu",
+        eos_ids: Optional[Sequence[int]] = None,
     ) -> "State":
-        """Attach banks to a freshly loaded base model. Mutates `model` in place."""
+        """Attach banks to a freshly loaded base model. Mutates `model` in place.
+
+        `eos_ids` replaces the tokenizer's single EOS as the set of tokens that stop sampling.
+        """
         delta = DeltaModel(model, rank=cfg.model.rank, alpha=cfg.model.alpha)
         handle = ModelHandle(
             delta,
@@ -95,6 +99,7 @@ class State:
             PromptFormat(cfg.model.prompt_template, cfg.model.empty_context),
             cfg.model.batch_size,
             cfg.model.fp16,
+            eos_ids,
         )
         return cls(handle, EpisodicStore(), world, world_seed)
 
@@ -117,6 +122,8 @@ class State:
             "world_seed": self.world_seed,
             "heldout": sorted(self.heldout),
             "base_fingerprint": self.handle.delta.base_fingerprint(),
+            "exempt_forward": self.ledger.exempt_forward,
+            "exempt_backward": self.ledger.exempt_backward,
         }
         with open(os.path.join(tmp, "state.json"), "w", encoding="utf-8") as handle:
             json.dump(meta, handle, indent=1)
@@ -141,6 +148,7 @@ class State:
         if handle.delta.base_fingerprint() != meta["base_fingerprint"]:
             raise ValueError("checkpoint was written over a different base model")
         handle.delta.load_state_dict(torch.load(os.path.join(directory, "adapters.pt"), map_location="cpu", weights_only=True))
+        handle.ledger.restore_exempt(meta["exempt_forward"], meta["exempt_backward"])
         return cls(
             handle,
             EpisodicStore.load(os.path.join(directory, "store.json")),
@@ -167,6 +175,8 @@ class NightReport:
     compaction: dict = field(default_factory=dict)
     decision: dict = field(default_factory=dict)
     retired: list[str] = field(default_factory=list)
+    episodes_trained: int = 0  # Episodes in at least one completed optimizer step, training or repair.
+    episodes_marked_consolidated: int = 0  # Of those, how many got `consolidated_night` for the first time.
     pressure: Optional[float] = None
     delta: dict = field(default_factory=dict)
     ledger: dict = field(default_factory=dict)
@@ -264,6 +274,7 @@ def _attach_context_and_distractor(
     for candidate in candidates:
         episodes = retriever.retrieve(candidate.query, store, retrieval_k, candidate.episode_ids)
         candidate.context = format_context(episodes)
+        candidate.context_ids = tuple(e.id for e in episodes)
         if not candidate.context:
             candidate.distractor = None
             continue
@@ -366,10 +377,12 @@ def run_night(state: State, cfg: NightConfig) -> NightReport:
 
         # ---- Stage 1b: pair contexts need the store to hold tonight's episodes.
         pair_count = 0
+        pair_stats: dict[str, int] = {}
         if arm.pair_contexts and query_gen is not None:
             pair_gen = PairQueryGen(query_gen, cfg.queries.max_pairs)
             with ledger.stage("synthesis"):
                 pair_cands, pairs_exhausted = pair_gen.generate(store, stored_new, rng("query_pairs"))
+            pair_stats = pair_gen.stats
             synthesis_exhausted = synthesis_exhausted or pairs_exhausted
             pair_count = len(pair_cands)
             pair_train, pair_held, held = split_heldout(
@@ -386,6 +399,7 @@ def run_night(state: State, cfg: NightConfig) -> NightReport:
             "train_candidates": len(train_cands),
             "heldout_candidates": len(held_cands),
             "pair_candidates": pair_count,
+            "pairs": pair_stats,
             "exhausted": synthesis_exhausted,
         }
 
@@ -475,7 +489,10 @@ def run_night(state: State, cfg: NightConfig) -> NightReport:
         teacher_rng = rng("teacher")
         with ledger.stage("teacher"):
             if arm.teacher_kl:
-                specs = [TargetSpec(c.query, c.context, "committed", "integrate") for c in train_part.integrate]
+                specs = [
+                    TargetSpec(c.query, c.context, "committed", "integrate", c.context_ids)
+                    for c in train_part.integrate
+                ]
                 integrate_targets, exhausted = build_targets(handle, specs, cfg.teacher, teacher_rng, cache)
                 teacher_exhausted = teacher_exhausted or exhausted
             if arm.anchors != "none":
@@ -550,11 +567,17 @@ def run_night(state: State, cfg: NightConfig) -> NightReport:
         )
     if not decision.accepted:
         delta.restore(snapshot)
-    else:
-        # Everything that fed the hard term tonight. An episode already marked keeps its first night.
-        trained = stored_new if arm.hard_pool == "new" else stored_new | {e.id for e in store.replayable()}
+    trained = set(train_result.trained_episode_ids)
+    trained.update((report.compaction.get("repair") or {}).get("trained_episode_ids", []))
+    report.episodes_trained = len(trained)
+    if decision.accepted:
+        # Only what reached a completed optimizer step, not all that could have been sampled: when the budget
+        # ends early, the rest was never trained. An episode already marked keeps its first night.
         for episode_id in sorted(trained):
-            store.get(episode_id).meta.setdefault("consolidated_night", night)
+            meta = store.get(episode_id).meta
+            if "consolidated_night" not in meta:
+                meta["consolidated_night"] = night
+                report.episodes_marked_consolidated += 1
     report.decision = asdict(decision)
     if arm.audit:
         report.retired = update_episodes(

@@ -45,7 +45,6 @@ from llmsleep.worlds import SyntheticWorld, WorldConfig  # noqa: E402
 
 ModelFactory = Callable[[str, bool], tuple[Any, Any]]
 Hook = Optional[Callable[[str, int], None]]
-_LEDGER_PROCESS_FIELDS = ("exempt_forward", "exempt_backward")
 
 
 @dataclass(frozen=True)
@@ -198,16 +197,20 @@ def identity_hash(identity: dict) -> str:
     return hashlib.sha256(json.dumps(identity, sort_keys=True).encode("utf-8")).hexdigest()[:16]
 
 
+def stop_tokens(model: Any, tokenizer: Any) -> Optional[list[int]]:
+    """The tokenizer's EOS plus the generation config's: instruct checkpoints stop on more than one token."""
+    ids = {tokenizer.eos_token_id} if tokenizer.eos_token_id is not None else set()
+    eos = getattr(getattr(model, "generation_config", None), "eos_token_id", None)
+    if eos is not None:
+        ids |= set(eos if isinstance(eos, (list, tuple)) else [eos])
+    return sorted(ids) or None
+
+
 def _prepare_state(
     night_cfg: NightConfig, cell: Cell, world: SyntheticWorld, factory: ModelFactory, device: str
 ) -> State:
     model, tokenizer = factory(cell.model_id, night_cfg.model.fp16)
-    state = State.create(model, tokenizer, world, cell.seed, night_cfg, device)
-    generation = getattr(model, "generation_config", None)
-    eos = getattr(generation, "eos_token_id", None)
-    if eos is not None:  # Instruct checkpoints stop on more than the tokenizer's single EOS.
-        state.handle.eos_ids |= set(eos if isinstance(eos, (list, tuple)) else [eos])
-    return state
+    return State.create(model, tokenizer, world, cell.seed, night_cfg, device, stop_tokens(model, tokenizer))
 
 
 def _build_suite(config: dict, state: State, out: Path, qa_items: Optional[Sequence[dict]]) -> tuple[Any, Any]:
@@ -251,14 +254,6 @@ def _prune_checkpoints(root: Path, keep: int) -> None:
         shutil.rmtree(root / name)
 
 
-def _clean_report(report_dict: dict) -> dict:
-    """Exempt counters accumulate per process and are not checkpointed. Results must not depend on a resume."""
-    ledger = dict(report_dict.get("ledger", {}))
-    for field in _LEDGER_PROCESS_FIELDS:
-        ledger.pop(field, None)
-    return {**report_dict, "ledger": ledger}
-
-
 def run_cell(
     config: dict,
     cell: Cell,
@@ -293,7 +288,11 @@ def run_cell(
     if (roots / "LATEST").exists():
         state = State.load(str(roots), state.handle, world)
     _rebuild_results(directory, state.night)
+    # Setup runs once per process and its cost depends on the disk cache, so it stays out of the counters,
+    # which then hold evaluation only and are the same with or without a kill.
+    exempt_forward, exempt_backward = state.ledger.exempt_forward, state.ledger.exempt_backward
     capability, drift = _build_suite(config, state, out, qa_items)
+    state.ledger.restore_exempt(exempt_forward, exempt_backward)
     eval_cfg = EvalConfig(**config.get("eval", {}))
     code = code_identity(code_hash)
 
@@ -317,7 +316,7 @@ def run_cell(
             night_cfg.retrieval_k,
         )
         eval_tokens = state.ledger.exempt_forward + state.ledger.exempt_backward - exempt_before
-        report_dict = _clean_report(report.to_dict())
+        report_dict = report.to_dict()
         record = {
             "experiment": config.get("experiment"),
             "seed_role": config.get("seed_role"),
