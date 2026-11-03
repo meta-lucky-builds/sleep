@@ -2,6 +2,10 @@ name: e0
 
 # Manual only: these runs spend the account's Actions minutes. See configs/README.md for estimated CPU time.
 on:
+  # workflow_dispatch needs the file on the default branch, which stays untouched, so tags also trigger it:
+  # e0-smoke-* for smoke checks, e0-run-* for E0. Tag runs read their models from configs/e0_models.txt.
+  push:
+    tags: ["e0-smoke-*", "e0-run-*"]
   workflow_dispatch:
     inputs:
       models:
@@ -23,11 +27,14 @@ jobs:
     outputs:
       models: ${{ steps.split.outputs.models }}
     steps:
+      - uses: actions/checkout@v4
       - id: split
         env:
           MODELS: ${{ inputs.models }}
         # Standard library only: this turns the input into the JSON list the matrix needs.
         run: |
+          if [ -z "$MODELS" ]; then MODELS="$(paste -sd, configs/e0_models.txt)"; fi
+          export MODELS
           python3 -c 'import json, os; print("models=" + json.dumps([m.strip() for m in os.environ["MODELS"].split(",") if m.strip()]))' >> "$GITHUB_OUTPUT"
 
   run:
@@ -43,7 +50,7 @@ jobs:
       HF_HUB_DISABLE_TELEMETRY: "1"
       HF_HOME: ${{ github.workspace }}/.hf-cache
       MODEL: ${{ matrix.model }}
-      SMOKE: ${{ inputs.smoke }}
+      SMOKE: ${{ inputs.smoke || startsWith(github.ref_name, 'e0-smoke-') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
