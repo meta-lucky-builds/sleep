@@ -209,15 +209,18 @@ def test_full_and_noselect_allocate_the_same_ledger_total(tokenizer):
         assert report.ledger["spent"] <= tokens
 
 
-def test_noselect_credit_buys_more_training_tokens_when_steps_are_uncapped(tokenizer):
+def test_noselect_spends_its_signal_credit_on_teaching_when_steps_are_uncapped(tokenizer):
+    # A1.4: KL runs on all usable queries, so the credit may go to teacher targets as well as training.
     tokens = 20_000
-    spent = {}
+    teaching = {}
     for arm_name in ("S_full", "S_noselect"):
         cfg = small_config(replace(get_arm(arm_name), query_source="template"), night_tokens=tokens)
         cfg.train = TrainConfig(lr=1e-3, hard_batch=2, kl_batch=2, anchor_batch=2)  # max_steps None.
         report = run_night(fresh_gpt2_state(cfg, TinyWorld(), tokenizer), cfg)
-        spent[arm_name] = report.ledger["forward"]["train"] + report.ledger["backward"]["train"]
-    assert spent["S_noselect"] > spent["S_full"]
+        teaching[arm_name] = sum(
+            report.ledger[kind].get(stage, 0) for kind in ("forward", "backward") for stage in ("teacher", "train")
+        )
+    assert teaching["S_noselect"] > teaching["S_full"]
 
 
 def test_noselect_trains_on_all_queries_and_draws_matched_anchors_without_chd(tokenizer, world, monkeypatch):
