@@ -13,10 +13,11 @@ Resume point for the coordinator. Update at every phase boundary.
 ## Phase log
 - [done] Literature T1, T2, T3 (`docs/literature/`).
 - [done] Theory draft 1, pre-registration, design spec (`docs/THEORY.md`, `PREREG.md`, `DESIGN.md`).
-- [in progress] IMPL-A core: delta, handle, memory, signals, ledger, config, arms, phases, tests.
-- [next] IMPL-B: worlds, eval, stats, experiments, configs, CI, packaging, README.
-- [next] Independent review by a fresh agent, fix findings, push, read CI.
-- [next] Colab: open connection, E0 (no training, picks model, validates signal), then E1 onward per PREREG.
+- [done] IMPL-A core, IMPL-B benchmark, eval, runner, CI.
+- [done] Independent review (`docs/REVIEW_1.md`); all CRITICAL and HIGH fixed; PREREG Amendment 1. CI: 398 passed.
+- [in progress] Real-model smoke via GitHub Actions. Tag `e0-smoke-N` triggers it, `e0-run-N` runs E0, models in `configs/e0_models.txt`. Results as run artifacts.
+- [next] E0 proper, then decide model and whether the control layer survives.
+- [next] E1 onward need a GPU: Colab or Kaggle.
 
 ## Blockers
 - Kaggle MCP needs the user's sign-in via /mcp; not required while Colab works.
