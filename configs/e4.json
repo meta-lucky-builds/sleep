@@ -1,0 +1,10 @@
+{
+  "experiment": "E4",
+  "seed_role": "confirmatory",
+  "mode": "eval_checkpoints",
+  "source_out": "runs/e3",
+  "model_ids": ["Qwen/Qwen2.5-0.5B"],
+  "world_seeds": [1001, 1002, 1003, 1004, 1005],
+  "arms": ["B3_replay", "S_full"],
+  "eval": {"max_new_tokens": 24, "batch_size": 32, "entrench_max": 200}
+}

@@ -398,3 +398,76 @@ Less crowded: the **rigorous ablation ladder**, **many-cycle dynamics**, **selec
 - B4 (González 2020) identity is likely but unconfirmed. Hopfield/Crick-Mitchison/Hinton/Robins are not read.
 - "Not found" statements reflect a bounded search (alphaXiv discovery with two to three queries per topic, a handful of web searches), not an exhaustive survey.
 - No models or code were run.
+
+---
+
+## 12. Follow-up (2026-11-04): GATES, Kotha-Liang, divergence as a control signal, entrenchment, anchoring
+
+Access tags as above. All items here are PART unless stated; WebSearch-only items are ABS (snippet).
+
+### 12.1 GATES (arXiv 2602.20574) and Kotha and Liang (arXiv 2603.04964)
+
+**GATES (PART).** What is gated: *which training questions are distilled*. For each question the model, given the source document ("tutor"), samples k=8 reasoning rollouts. If at least τ of them agree on the final answer, the question's agreeing document-conditioned trajectories are distilled into the document-free "student" (same weights). Otherwise the question contributes zero loss. So the gate is **agreement among context-conditioned rollouts**, not a divergence between context-conditioned and closed-book outputs.
+- Setup: Qwen3-4B-Base, math word problems generated from documents, 551 train questions, **50 held-out** questions, one epoch. The paper states ≥4/8 agreement in the training details and 5/8 in the dataset filter; I did not resolve which applies to the gate in the main run.
+- Numbers: held-out in-domain student accuracy 46.0% to 62.0% (31/50 vs 23/50, my arithmetic). Average maj@8 on MATH/AMC/Minerva/OlympiadBench 20.2% to 35.4%. Removing the gate (same loss weights): 54.0% in-domain and 31.1% benchmark average (so the gate is worth about 8 points in-domain and 4.3 points on benchmarks). Tutor-trajectory SFT without gating: 54% and 32.3%. Answer-only SFT collapses to 10 to 12% in-domain.
+- Caveats: under **greedy decoding GATES and ungated tutor-trajectory SFT are tied** (40.0 vs 40.3 average); the gate's benchmark advantage is in maj@8 only. The in-domain reference answers come from a Qwen2.5-32B-Instruct 8-rollout consensus. Math only. Authors name the failure mode: confident but wrong consensus; with an adaptive question generator, adding an oracle-correctness loss helped. Without the gate, the student inherits "document-dependent" reasoning (tutor 74% vs student 54%).
+
+**Kotha and Liang (PART).** What is replayed: **fresh samples from the generic (pretraining-like) distribution, mixed into fine-tuning on a target domain** (a fraction ρ of Stage-2 steps). Not self-generated, not old-task replay in the continual-learning sense. They report that replay *improves the target-domain loss*, not only retention.
+- Controlled setup: 150M-parameter models, 4M target tokens (FineMath, StarCoder, Flan), up to 4B generic C4 tokens. Data-efficiency gains from tuned replay: 1.87x (Flan), 1.49x (FineMath), 1.09x (StarCoder) for fine-tuning; up to 2.06x with a mid-training schedule. Benefit persists to 1.9B-scale models in their size sweep (qualitatively; exact numbers not read). Replay helps more when the target domain is rare in pretraining; with 75% of the target data already in pretraining it stops helping or hurts.
+- Real models: Llama 3.1 8B Instruct on Weblinx web navigation, baseline 32.86%, up to +4.5 points with OpenHermes/UltraChat replay; Llama 3.1 8B on 200M Basque tokens, up to +2 points on Basque COPA with SlimPajama replay.
+- Caveats: replay costs 1/(1-ρ) more steps; the ρ was tuned per setting; real-model gains are single-benchmark and small; weight decay did not substitute for replay. Relevance: it supports a regularisation reading (replay curbs overfitting to few target samples), which is separate from the sleep reading.
+
+### 12.2 Is the divergence between in-context and closed-book outputs used as a control signal?
+
+**Yes in pieces; I did not find the full set (select / audit / schedule / retire).**
+
+| Use | Found? | Source (tag) | Result |
+|---|---|---|---|
+| Select which items to distill | **Yes** | ReSAIL, arXiv 2609.39306 (PART) | "PI sensitivity" = Jensen-Shannon divergence between the teacher's output distribution with and without the privileged context, per step. Keep the top 5% most sensitive steps. ALFWorld, Qwen3-4B, cycle 1, success without PI, ID/OOD: Top 62.2/57.3, Random 49.7/45.8, **Bottom 40.1/40.4**; ratio sweep: top 5% best (62.2/57.3), 100% gives 56.8/50.3. Cuts student-optimisation cost about 74% (total loop about 6%). Also +1.06 points on AITZ as an offline filter. One training seed; error bars are decoding seeds only |
+| Arbitrate source at inference | Yes | TrustMargin, arXiv 2606.08397 (PART) | Compares closed-book likelihood of the RAG answer vs the direct answer (parametric-prior margin), plus context-only likelihood subtraction (evidence-binding margin). LLaMA-3.1-8B average F1: Direct 37.25, BM25-RAG 36.28, TrustMargin 42.61. Recovers 24.9 to 41.3% of the Direct/RAG oracle F1 gap; selects Direct when Direct is better 60 to 66% of the time. Inference-time selection; no weights updated; bounded by the two candidates. Needs no gold labels at decision time |
+| Detect whether context or memory governed output | Partial | CRM, arXiv 2605.26778 (PART) | Per-layer hidden-state displacement (with context minus without) detects whether the context document was in the pretraining data: AUC 0.71 to 0.95 (WikiMIA, nine models), 0.84 to 0.97 (BookMIA), **0.48 to 0.55 on MIMIR (fails)**. The authors say it does not certify which source any single generation used |
+| Context-sensitive token identification | Background | PECoRe / P-CXMI (search snippets, ABS) | Per-token likelihood ratio, P-CXMI, KL between with- and without-context distributions are standard measures of context influence (from machine translation interpretability). I did not read them |
+| Contrastive decoding (CAD, COIECD, AutoCAD) | Cited only | via C9 (Goyal), PART | Amplify the with-vs-without-context difference at inference; C9 says they give "limited gains, especially in instruction finetuned models" |
+| Decide *when* to consolidate | **Not found** | - | - |
+| Audit consolidation without ground truth (closed-book now matches context-conditioned) | **Not found as a stated method.** Cortex and DiSC *train* toward that match (A8, C3) but measure with labelled evals (CR/RR, QA accuracy) | - | - |
+| Decide when a memory may leave retrieval | **Not found** | - | - |
+
+Searches run for the "not found" rows: alphaXiv discovery on "knowledge conflict detection / context influence / parametric knowledge / retrieval-augmented / context-aware decoding"; WebSearch on retiring or evicting retrieved memory after internalisation and on closed-book-vs-RAG agreement as an audit (returned background on parametric vs external memory, CAMeR, MemoryLLM, MEGa; nothing on retirement or audit); WebSearch on P-CXMI/CCI/context-mixing. Listing-only leads, unread: 2606.10298 (conflict-aware contrastive decoding), 2605.14473 (does RAG know when retrieval is wrong), 2610.38296, 2609.00753, 2610.20067. The "memory retirement for RAG" phrasing was searched once (WebSearch, above) and not via alphaXiv; treat that null as weaker than the others.
+
+**Takeaways.** (i) Divergence-based *selection* of consolidation targets has one positive result (ReSAIL, 3 cycles, text-agent tasks, one training seed). (ii) TrustMargin shows the closed-book likelihood of a candidate is a usable trust signal at inference. (iii) Both are untested for the retirement/audit role. (iv) CRM's MIMIR failure and the paper's own caveat argue against reading the with/without-context divergence as a per-item source certificate.
+
+### 12.3 Entrenchment: does fine-tuning a fact into weights make the model follow contradicting context less?
+
+**I found no paper that measures this on the same fact** (fine-tune or edit fact F, then compare context-following under a contradicting context for F against an unlearned control fact). Null result.
+
+What I found that is adjacent:
+- **Context-parametric inversion (C9, PART).** Instruction tuning on data that mixes in non-context-critical examples *lowers* reliance on a contradicting context over training, on facts *not* in the tuning data (they removed overlap and still saw the drop): Llama2-7B counterfactual reliance rose from about 30% to about 60% and fell back to about 35%. A web-search snippet adds that the drop persists with a context-only Alpaca subset of about 30% (ABS). This is a general shift toward parametric answering, not an entrenchment measurement on edited facts.
+- **Parametric-vs-context arbitration by confidence (ABS, search snippet only, arXiv 2510.02370 and 2410.08414 listed; unread):** reported as preferring parametric knowledge for high-confidence facts. If true, entrenchment would be predicted by confidence, but I did not verify.
+- **Context reliance in unstructured editing (arXiv 2602.19043, PART).** The opposite problem: edited knowledge becomes *dependent on its training context* (recall fell by up to 56% ROUGE on later-positioned facts when the context is absent; restoring the context restores recall; worse in larger models, 14B vs 0.5B; more training steps did not fix it). This is about retrieval of edited facts without context, not override of contradicting context.
+- **Engram Injection (arXiv 2610.15882, PART).** Dated-update setup: after storing an old value and its replacement in a LoRA, the model prefers the old value before the update at 0.99 and the new one afterward at 0.79 to 0.95 with a margin loss; **0/62 on the held-out-age generation test** (retrieval 62/62). That shows weights-stored facts are poor at version arbitration, but it never presents contradicting *context* to a fact trained into weights.
+- **Spurious forgetting / suppressed-not-erased (arXiv 2610.08718, 2609.18985; listing only, unread)** and **Rewired or Gated (2609.25602; listing only)** may bear on it.
+
+Inference, labelled as such: there is a plausible route to entrenchment (training on non-context-critical examples reduces context reliance, C9; a fact distilled from context so that closed-book matches context-conditioned output is, by construction, a non-context-critical example afterwards). Nobody I found tested it. A direct test is cheap: after a consolidation cycle, present a counterfactual context for consolidated facts and for matched never-consolidated facts and compare the follow rate.
+
+### 12.4 Anchor to original pretrained weights vs previous checkpoint across repeated cycles; accumulated drift
+
+**No head-to-head comparison of the two anchors across many cycles found. Null result on that exact contrast.** Evidence on the pieces:
+
+- **Which reference each system uses (read):**
+  - Frozen *initial* model: DiSC (teacher = frozen copy of the post-trained model, single adaptation, C3), OPCD default (frozen teacher; self-teacher that tracks the student diverged: Sokoban 18.8 vs 53.9, C4), Marek KL on samples from the frozen reference model (A14), Cortex for generic-query targets in continual editing ("generated once by the initial model M0 and cached", A8).
+  - Frozen *previous checkpoint*: Cortex query replay regenerates targets with the pre-update checkpoint (A8); CAGD (arXiv 2610.06940) freezes the previous-stage model each stage; ReSAIL freezes the cycle-start model each cycle and carries the final student into the next cycle (2609.39306).
+  - SDFT appendix (C5): frozen base teacher is stable but underperforms; student-as-teacher diverges; EMA is the compromise. This is a within-run anchor comparison, not across cycles.
+- **Drift / collapse curves over cycles (read):**
+  - ReSAIL (ALFWorld OOD, Qwen3-4B, OEL baseline, three cycles): success 47.1, 46.1, **38.5** across cycles 1 to 3; ID 54.9, 56.5, 47.4. With selection, TLB and retention: ID 62.2, 70.1, 74.2; OOD 57.3, 63.5, 67.2. PI-conditioned competence (what the next teacher can do) also declines under the baselines. Retention toward the **cycle-start frozen teacher in the privileged view** is the component that keeps cycle 3 from falling (74.2 vs 56.5 with none; ordinary-view retention 72.9). Decoding-seed error bars; one training run.
+  - Denser is not Better (arXiv 2607.01763, PART): SDPO on four sequential domains: MATH 56.42% after its stage falls to **34.38%** by the end, TOOLUSE 9.93%, collapse in a variant; GRPO retains. Parameter-drift metrics (spectral shift, principal-angle rotation) are larger for SDPO. Linear merging with the base weights at 50% recovered GPQA 58.72 to 62.25 and ZLogic 74.50 to 76.42. This is indirect evidence that an anchor to the original weights (merging) repairs accumulated drift; it is a post-hoc fix, not an in-loop anchor comparison.
+  - CAGD (2610.06940, PART): previous-checkpoint distillation; four-task final held-out loss 2.927 to 1.114 (SMDM-219M, one order); but **GSM8K exact-match retention is seed-mixed at 0.6B and worse at 1.7B** (-22.2 vs -15.8 points sequential), format compliance 89% vs under 1%. The authors note CAGD "cannot repair knowledge that the previous model has already lost": anchoring to the previous checkpoint inherits its errors by design.
+  - Cortex (A8): 50 sequential edits keep 99.8% retention measured against the *original* model on a 14B model, with replay of past queries and cached initial-model targets for generic queries. Closest thing to a many-step drift number in the literature I read. No curve over steps in the text I saw, and no ablation swapping the anchor.
+- **Not found:** a study that runs more than about 10 cycles of context distillation and plots divergence from the *original* weights (or capability on a fixed held-out suite) for the two anchoring choices; any treatment of why a previous-checkpoint anchor should accumulate drift (it is a random walk on a chain of local constraints; this is my reasoning, not a cited result).
+
+### 12.5 Added design implications (confidence)
+
+11. **Use teacher-with-context vs teacher-without-context divergence (JSD or KL) to pick which items to consolidate, and compare against random and bottom-ranked selection at the same budget.** ReSAIL's Top/Random/Bottom ladder is the control to copy. *Medium* (one positive result, one training seed, agent tasks).
+12. **Add an agreement gate on the context-conditioned teacher (GATES-style) but report greedy and maj@k separately**; the gate's benefit may live in consistency rather than peak accuracy. *Medium-Low.*
+13. **Measure entrenchment explicitly each cycle** (contradicting-context follow rate on consolidated vs never-consolidated facts). *High* that it is untested; *Low* on the size of the effect.
+14. **Anchor generic-capability targets to the original model's cached outputs, and use the previous checkpoint only for newly consolidated content.** This is what Cortex does in practice and it is the only multi-step (50) result with near-complete retention; no direct ablation exists, so *Low-Medium*. Include a base-weight merge or a distance-to-original curve as a diagnostic (2607.01763 shows merging repairs drift).
+15. **Do not use with/without-context divergence as a per-item "this memory can be retired" certificate without a labelled audit.** CRM fails on a confounded benchmark and disclaims per-generation attribution; no retirement method was found. *Medium.*

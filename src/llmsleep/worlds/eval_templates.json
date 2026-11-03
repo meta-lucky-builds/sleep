@@ -1,0 +1,44 @@
+{
+  "_comment": "Fixed evaluation forms (invariant 6, PREREG). Not generated. Change only by appending a dated PREREG entry. Worded plainly: E0's in-context thresholds must test the model, not a riddle.",
+  "direct": {
+    "employer": ["Name the organisation that pays {subject}'s wages."],
+    "hometown": ["Name the town where {subject} lived as a child."],
+    "instrument": ["Name the musical instrument played by {subject}."],
+    "birth_year": ["Give the year of {subject}'s birth."],
+    "invention": ["Name the device credited to {subject}."],
+    "nickname": ["Give the informal name used for {subject}."],
+    "hq_city": ["Name the city housing the head office of {subject}."],
+    "product": ["List the goods produced by {subject}."],
+    "region": ["Name the wider district around {subject}."]
+  },
+  "paraphrase": {
+    "employer": ["Tell me which organisation has {subject} on its payroll."],
+    "hometown": ["Tell me the town {subject} lived in as a small child."],
+    "instrument": ["Tell me which musical instrument {subject} can play."],
+    "birth_year": ["Tell me the year {subject} arrived in this world."],
+    "invention": ["Tell me which device exists thanks to {subject}."],
+    "hq_city": ["Tell me the city where {subject} keeps its head office."]
+  },
+  "reverse": {
+    "invention": ["Give the full name of the person behind the original {value}."],
+    "nickname": ["Give the full name of the person known informally as {value}."]
+  },
+  "alias": {
+    "employer": ["Someone nicknamed {alias} draws wages from which organisation?"],
+    "hometown": ["Someone nicknamed {alias} lived as a child in which town?"],
+    "instrument": ["Someone nicknamed {alias} performs with which musical instrument?"],
+    "birth_year": ["Someone nicknamed {alias} was born in which year?"],
+    "invention": ["Someone nicknamed {alias} gets credit for which device?"]
+  },
+  "two_hop": {
+    "employer>hq_city": ["Name the city housing the head office of the organisation that pays {subject}."],
+    "hometown>region": ["Name the wider district around the town where {subject} lived as a child."]
+  },
+  "contradiction": {
+    "employer": ["A new registry entry says {subject} is paid by {value}."],
+    "hometown": ["A new registry entry says {subject} lived as a child in {value}."],
+    "instrument": ["A new concert programme says {subject} performs with the {value}."],
+    "birth_year": ["A new registry entry gives {value} as the year of {subject}'s birth."],
+    "invention": ["A new patent record credits {subject} with the {value}."]
+  }
+}

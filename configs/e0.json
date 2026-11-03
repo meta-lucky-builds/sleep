@@ -1,0 +1,20 @@
+{
+  "experiment": "E0",
+  "seed_role": "dev",
+  "model_ids": [
+    "Qwen/Qwen2.5-0.5B",
+    "Qwen/Qwen2.5-0.5B-Instruct",
+    "Qwen/Qwen2.5-1.5B",
+    "Qwen/Qwen2.5-1.5B-Instruct",
+    "Qwen/Qwen2.5-3B",
+    "Qwen/Qwen2.5-3B-Instruct"
+  ],
+  "world_seed": 7,
+  "world": {"n_persons": 30, "n_orgs": 8, "n_cities": 8, "n_regions": 4, "nights": 1, "supersession_rate": 0.0, "n_distractors": 80, "n_control_persons": 4, "n_entrench": 0},
+  "fp16": true,
+  "batch_size": 32,
+  "max_probes": 120,
+  "max_new_tokens": 24,
+  "k": 8,
+  "chd_tokens": 24
+}

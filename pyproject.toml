@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llmsleep"
+version = "0.1.0"
+description = "Sleep for language models: controlled, many-cycle consolidation"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.3",
+    "transformers>=4.41",
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+capability = ["datasets>=2.19"]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+llmsleep = ["worlds/*.json", "eval/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
