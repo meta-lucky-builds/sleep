@@ -1,4 +1,8 @@
-"""Day: the write gate. An episode whose own queries barely depend on it is already known; don't store it."""
+"""Day: the write gate. An episode whose own queries barely depend on it looks known already: defer it.
+
+Deferred, not dropped (A1.12): the episode is stored without active retrieval and is still replayed, so a false
+gate decision costs retrieval and tonight's teacher targets, and never loses a real fact.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -14,9 +18,10 @@ from ..signals import SignalCache, chd_safe
 @dataclass
 class WakeResult:
     episode_id: str
-    stored: bool
+    deferred: bool
     reason: str
     mean_chd: Optional[float] = None
+    stored: bool = True  # Every real episode is stored now; kept so reports read the same across arms.
 
 
 def observe(
@@ -32,31 +37,26 @@ def observe(
     chunk: int = 4,
     bypass: bool = False,
 ) -> WakeResult:
-    """Store `episode` unless CHD on `probes` (query, distractor context) is at or below `threshold`.
+    """Store `episode`, deferring it if per-token CHD on `probes` (query, distractor context) is <= `threshold`.
 
-    Fails open: if the gate cannot judge (no probes, no threshold, no budget), the episode is stored, since
-    losing a real episode is worse than storing a known one. A superseding episode always passes: low CHD
-    on it cannot mean "already known" when it contradicts what the model believes it knows from elsewhere.
-    Runs under the active banks.
+    If the gate cannot judge (no probes, no threshold, no budget), the episode stays active. A superseding episode
+    always does: low CHD on it cannot mean "known" when it contradicts what the model holds. Runs under active banks.
     """
+    store.add(episode)
     if bypass:
-        store.add(episode)
-        return WakeResult(episode.id, True, "bypass")
+        return WakeResult(episode.id, False, "bypass")
     if episode.supersedes:
-        store.add(episode)
-        return WakeResult(episode.id, True, "supersession")
+        return WakeResult(episode.id, False, "supersession")
     if not probes or threshold is None:
-        store.add(episode)
-        return WakeResult(episode.id, True, "unscored")
+        return WakeResult(episode.id, False, "unscored")
     context = format_context([episode])
     items = [(query, context, distractor) for query, distractor in probes]
     values, _ = chd_safe(handle, items, k, max_new_tokens, generator, cache, chunk)
     scored = [v for v in values if v is not None]
     if not scored:
-        store.add(episode)
-        return WakeResult(episode.id, True, "unscored")
+        return WakeResult(episode.id, False, "unscored")
     mean_chd = sum(scored) / len(scored)
     if mean_chd <= threshold:
-        return WakeResult(episode.id, False, "already_known", mean_chd)
-    store.add(episode)
-    return WakeResult(episode.id, True, "novel", mean_chd)
+        store.defer(episode.id)
+        return WakeResult(episode.id, True, "already_known", mean_chd)
+    return WakeResult(episode.id, False, "novel", mean_chd)

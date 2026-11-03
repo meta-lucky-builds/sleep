@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from contextlib import nullcontext
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -20,7 +20,14 @@ from llmsleep.eval.answers import (
     normalize_answer,
     score_answer,
 )
-from llmsleep.eval.capability import CapabilityConfig, CapabilityItem, build_capability, cache_path, evaluate_capability
+from llmsleep.eval.capability import (
+    CapabilityConfig,
+    CapabilityItem,
+    build_capability,
+    cache_path,
+    evaluate_capability,
+    usable_answers,
+)
 from llmsleep.eval.drift import build_drift_probe, load_generic_prompts, measure_generic_drift
 from llmsleep.eval.metrics import EvalConfig, evaluate_night, evaluate_probes
 from llmsleep.handle import Sample
@@ -40,7 +47,8 @@ class ScriptedHandle:
         self.batch_size = 4
         self.delta = None
         self.calls = 0
-        self.banks_seen: list = []
+        self.active = "unset"
+        self.sampled_under: set = set()  # The bank selection in force at each generation.
 
     def format(self, query, context=None):
         return json.dumps([query, context])
@@ -48,13 +56,18 @@ class ScriptedHandle:
     def decode(self, ids):
         return "".join(ids)
 
+    @contextmanager
     def banks(self, spec):
-        self.banks_seen.append(spec)
-        return nullcontext()
+        previous, self.active = self.active, spec
+        try:
+            yield
+        finally:
+            self.active = previous
 
     def sample(self, prompts, n, max_new_tokens, temperature=1.0, generator=None):
         assert generator is not None
         self.calls += len(prompts)
+        self.sampled_under.add(self.active)
         out = []
         for prompt in prompts:
             query, context = json.loads(prompt)
@@ -143,6 +156,18 @@ def test_stale_is_separate_from_wrong():
     assert score_answer("Velmora", ["Velmora"], ["Velmora"], vocabulary).correct  # Unchanged value.
 
 
+def test_a_term_the_query_itself_names_is_no_competitor():
+    """Review H2: a sentence answer that repeats the question's own nickname is still right."""
+    vocabulary = ["Dara Quilmont", "Quilmont", "Bobo", "Ivo Stant", "Stant", "Lume"]
+    gold = ["Dara Quilmont", "Quilmont"]
+    query = "Give the full name of the person known informally as Bobo."
+    sentence = "The person known informally as Bobo is Dara Quilmont."
+    assert score_answer(sentence, gold, (), vocabulary, query).correct
+    assert not score_answer(sentence, gold, (), vocabulary).correct  # Without the query it reads as two entities.
+    assert not score_answer("Bobo", gold, (), vocabulary, query).correct  # Echoing the term is not an answer.
+    assert not score_answer("Bobo is Ivo Stant", gold, (), vocabulary, query).correct
+
+
 def test_first_answer_stops_at_the_run_on():
     assert first_answer(" Paris\nQuestion: What else?") == "Paris"
     assert first_answer("Paris Question: What?") == "Paris"
@@ -182,23 +207,75 @@ def test_an_oracle_gets_full_marks_on_acquisition_and_supersession():
     w = world()
     handle = ScriptedHandle(oracle_for(w, LAST))
     metrics, clusters = evaluate_probes(handle, full_store(w, LAST), CLOSED, w, LAST, w.seed, CFG)
-    for name in ("acq_direct", "acq_reverse", "acq_alias", "acq_two_hop", "acq_implied", "supersede", "preservation"):
+    for name in ("acq_direct", "acq_reverse", "acq_alias", "acq_twohop", "acq_implied", "supersede", "preservation"):
         assert metrics[name] == pytest.approx(1.0), name
     assert metrics["stale"] == pytest.approx(0.0)
     assert metrics["counts"]["supersede"] > 0
-    assert set(clusters["direct"]) and all(entry[1] > 0 for entry in clusters["direct"].values())
+    assert set(clusters["acq_direct"]) and all(entry[1] > 0 for entry in clusters["acq_direct"].values())
 
 
-def test_an_abstainer_scores_zero_with_no_false_recall():
+def test_evaluation_generates_under_the_committed_bank():
+    """Mutation 2 of the review: under germline, every arm would score like the frozen floor."""
+    w = world()
+    handle = ScriptedHandle(lambda q, c: "?")
+    cfg = EvalConfig(max_per_kind=2, max_new_tokens=4, entrench_nights=[LAST], entrench_max=2)
+    store = full_store(w, LAST)
+    for probe in w.probes:
+        if probe.kind == "entrench_fact":
+            store.get(probe.episode_ids[0]).meta["consolidated_night"] = 0
+    items = [CapabilityItem("q1", "Q one?", ("alpha",), 1.0, "head")]
+    evaluate_night(handle, store, CLOSED, w, LAST, w.seed, cfg, items)
+    assert handle.sampled_under == {"committed"}
+
+
+def test_lift_is_measured_against_another_facts_gold():
+    """A1.3: an answer of the right type but the wrong fact scores on the control, not on the metric."""
+    w = world()
+    active = [p for p in w.probes if p.active(LAST) and p.permuted and p.context is None]
+    assert {p.kind for p in active} >= {"direct", "reverse", "alias", "two_hop", "supersede"}
+    table = {p.query: p.permuted[0] for p in active}
+    handle = ScriptedHandle(lambda q, c: table.get(q, "?"))
+    metrics, clusters = evaluate_probes(handle, full_store(w, LAST), CLOSED, w, LAST, w.seed, CFG)
+    for name in ("acq_reverse", "acq_alias", "acq_twohop"):
+        assert metrics[name] == 0.0, name
+        assert metrics[f"{name}_permuted"] > 0.3, name
+        assert metrics[f"{name}_lift"] < -0.3, name
+    assert "acq_twohop_lift" in clusters and "acq_twohop_permuted" not in clusters
+
+    oracle = ScriptedHandle(oracle_for(w, LAST))
+    metrics, _ = evaluate_probes(oracle, full_store(w, LAST), CLOSED, w, LAST, w.seed, CFG)
+    assert metrics["acq_direct_lift"] == pytest.approx(1.0) and metrics["acq_direct_permuted"] == 0.0
+
+
+def test_chains_and_types_are_reported_apart():
+    w = world()
+    handle = ScriptedHandle(oracle_for(w, LAST))
+    metrics, _ = evaluate_probes(handle, full_store(w, LAST), CLOSED, w, LAST, w.seed, CFG)
+    assert metrics["acq_twohop_hq_city"] == pytest.approx(1.0) and metrics["acq_twohop_region"] == pytest.approx(1.0)
+    assert metrics["acq_reverse"] is not None and metrics["acq_alias"] is not None
+
+
+def test_accuracy_is_reported_by_fact_age():
+    w = world()
+    handle = ScriptedHandle(oracle_for(w, LAST))
+    metrics, _ = evaluate_probes(handle, full_store(w, LAST), CLOSED, w, LAST, w.seed, CFG)
+    by_age = metrics["acq_by_age"]
+    assert "0" in by_age and str(LAST) in by_age
+    assert sum(count for _, count in by_age.values()) == metrics["counts"]["direct"] + metrics["counts"]["supersede"]
+    assert all(hits == count for hits, count in by_age.values())
+    json.dumps(by_age)
+
+
+def test_an_abstainer_scores_zero_with_no_bleed():
     w = world()
     handle = ScriptedHandle(lambda q, c: "I don't know.")
     metrics, _ = evaluate_probes(handle, full_store(w, LAST), CLOSED, w, LAST, w.seed, CFG)
     assert metrics["acq_direct"] == 0.0 and metrics["acq_implied"] == 0.0
-    assert metrics["false_recall"] == 0.0 and metrics["false_recall_any_specific"] == 0.0
+    assert metrics["taught_value_bleed"] == 0.0 and metrics["false_recall_any_specific"] == 0.0
     assert metrics["abstain"] == 1.0
 
 
-def test_false_recall_counts_a_typed_answer_and_not_an_untyped_one():
+def test_bleed_counts_a_typed_answer_and_not_an_untyped_one():
     w = world()
     by_query = {p.query: p for p in w.probes if p.kind == "false_recall"}
 
@@ -207,12 +284,12 @@ def test_false_recall_counts_a_typed_answer_and_not_an_untyped_one():
         return w.vocabulary(probe.vocab)[0] if probe else "?"
 
     metrics, _ = evaluate_probes(ScriptedHandle(typed), full_store(w, LAST), CLOSED, w, LAST, w.seed, CFG)
-    assert metrics["false_recall"] == 1.0 and metrics["abstain"] == 0.0
+    assert metrics["taught_value_bleed"] == 1.0 and metrics["abstain"] == 0.0
 
     metrics, _ = evaluate_probes(
         ScriptedHandle(lambda q, c: "Zzyzzx Qqqq"), full_store(w, LAST), CLOSED, w, LAST, w.seed, CFG
     )
-    assert metrics["false_recall"] == 0.0  # Specific, but not of the attribute's type.
+    assert metrics["taught_value_bleed"] == 0.0  # Specific, but not of the attribute's type.
     assert metrics["false_recall_any_specific"] == 1.0
 
     def neighbour(query, context):
@@ -246,7 +323,7 @@ def test_acq_implied_is_the_mean_of_its_three_kinds():
     table = {p.query: p.gold[0] for p in w.probes if p.kind == "reverse" and p.active(LAST)}
     handle = ScriptedHandle(lambda q, c: table.get(q, "?"))
     metrics, clusters = evaluate_probes(handle, full_store(w, LAST), CLOSED, w, LAST, w.seed, CFG)
-    assert metrics["acq_reverse"] == 1.0 and metrics["acq_alias"] == 0.0 and metrics["acq_two_hop"] == 0.0
+    assert metrics["acq_reverse"] == 1.0 and metrics["acq_alias"] == 0.0 and metrics["acq_twohop"] == 0.0
     assert metrics["acq_implied"] == pytest.approx(1 / 3)
     num = sum(entry[0] for entry in clusters["acq_implied"].values())
     den = sum(entry[1] for entry in clusters["acq_implied"].values())
@@ -367,6 +444,12 @@ def test_capability_cache_needs_no_items_and_never_downloads_when_cached(tmp_pat
     assert build_capability(_qa_handle(), cfg, path)
 
 
+def test_short_aliases_cannot_give_false_credit():
+    assert usable_answers(["United States", "US", "U.S.", "America"]) == ["United States", "America"]
+    assert usable_answers(["Au", "gold"]) == ["Au", "gold"]  # The main answer stays, however short.
+    assert usable_answers([]) == []
+
+
 def test_cache_path_differs_by_model_and_settings(tmp_path):
     a = cache_path(str(tmp_path), "base-a", CapabilityConfig())
     assert a != cache_path(str(tmp_path), "base-b", CapabilityConfig())
@@ -481,12 +564,21 @@ def test_entrenchment_measures_loyalty_to_the_old_value():
 # ---- familiarity ---------------------------------------------------------------------------------------
 
 
-def test_check_unknown_passes_an_ignorant_model_and_flags_a_knowing_one():
+def test_check_unknown_rejects_a_knowing_model_and_lists_who_to_replace():
     w = world()
     clean = check_unknown(ScriptedHandle(lambda q, c: "I don't know."), w)
-    assert clean["passed"] and clean["flagged"] == []
+    assert clean["rejected"] == [] and clean["replace"] == []
 
     table = {p.query: p.gold[0] for p in w.probes if p.kind == "direct"}
     knowing = check_unknown(ScriptedHandle(lambda q, c: table.get(q, "?")), w)
-    assert not knowing["passed"] and knowing["flagged"]
-    assert not knowing["attributes"]["employer"]["ok"]
+    assert "birth_year" in knowing["rejected"] and knowing["replace"]
+    assert all(name in {e.name for e in w.entities.values()} for name in knowing["replace"])
+
+
+def test_one_lucky_year_does_not_reject():
+    """Review H3: one hit in a closed vocabulary is what chance gives."""
+    w = world()
+    lucky = next(p for p in w.probes if p.kind == "direct" and p.vocab == "birth_year")
+    result = check_unknown(ScriptedHandle(lambda q, c: lucky.gold[0] if q == lucky.query else "?"), w)
+    assert result["attributes"]["birth_year"]["hits"] == 1
+    assert result["rejected"] == []

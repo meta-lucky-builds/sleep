@@ -21,6 +21,7 @@ import copy
 import hashlib
 import json
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -40,6 +41,7 @@ from llmsleep.eval.capability import CapabilityConfig, build_capability, cache_p
 from llmsleep.eval.drift import build_drift_probe  # noqa: E402
 from llmsleep.eval.entrench import evaluate_entrenchment  # noqa: E402
 from llmsleep.eval.metrics import EvalConfig, eval_batch_size, evaluate_night  # noqa: E402
+from llmsleep.handle import is_instruct_model  # noqa: E402
 from llmsleep.phases.night import State, run_night  # noqa: E402
 from llmsleep.worlds import SyntheticWorld, WorldConfig  # noqa: E402
 
@@ -142,15 +144,33 @@ def _variant(config: dict, name: str) -> dict:
 
 
 def read_results(path: Path) -> list[dict]:
+    """Records in a results file. A half-written line from a killed writer is skipped with a warning."""
     if not path.exists():
         return []
     out = []
     with open(path, "r", encoding="utf-8") as stream:
         for line in stream:
             line = line.strip()
-            if line:
+            if not line:
+                continue
+            try:
                 out.append(json.loads(line))
+            except json.JSONDecodeError:
+                print(f"warning: skipped a partial line in {path}", file=sys.stderr)
     return out
+
+
+def package_versions() -> dict[str, Optional[str]]:
+    """What ran this, per result: CI and Colab may differ (review L7)."""
+    from importlib import metadata
+
+    versions: dict[str, Optional[str]] = {"python": platform.python_version()}
+    for name in ("torch", "transformers", "numpy", "datasets"):
+        try:
+            versions[name] = metadata.version(name)
+        except metadata.PackageNotFoundError:
+            versions[name] = None
+    return versions
 
 
 def matched_selection(config: dict, cell: Cell, out: Path, nights: int) -> Optional[dict]:
@@ -172,6 +192,8 @@ def build_cell_config(config: dict, cell: Cell, out: Path) -> tuple[dict, NightC
     variant = _variant(config, cell.variant)
     world_dict = merge(config.get("world", {}), variant.get("world", {}))
     night_dict = merge(config.get("night", {}), variant.get("night", {}))
+    # A1.10: per model, not per config: chat template on Instruct, raw completion on base.
+    night_dict = merge(night_dict, {"model": {"chat": is_instruct_model(cell.model_id)}})
     world_config = WorldConfig(**world_dict)
     matched = matched_selection(config, cell, out, world_config.nights)
     if matched is not None:
@@ -209,7 +231,8 @@ def stop_tokens(model: Any, tokenizer: Any) -> Optional[list[int]]:
 def _prepare_state(
     night_cfg: NightConfig, cell: Cell, world: SyntheticWorld, factory: ModelFactory, device: str
 ) -> State:
-    model, tokenizer = factory(cell.model_id, night_cfg.model.fp16)
+    # Weights go fp16 only where autocast will run: `--device cpu` on a GPU machine must stay float32.
+    model, tokenizer = factory(cell.model_id, night_cfg.model.fp16 and str(device).startswith("cuda"))
     return State.create(model, tokenizer, world, cell.seed, night_cfg, device, stop_tokens(model, tokenizer))
 
 
@@ -295,6 +318,7 @@ def run_cell(
     state.ledger.restore_exempt(exempt_forward, exempt_backward)
     eval_cfg = EvalConfig(**config.get("eval", {}))
     code = code_identity(code_hash)
+    versions = package_versions()
 
     while state.night < world.nights:
         night = state.night
@@ -328,6 +352,7 @@ def run_cell(
             "config_hash": cell_hash,
             "night_config_hash": night_cfg.config_hash(),
             "code_hash": code,
+            "versions": versions,
             "world_fingerprint": identity["world_fingerprint"],
             "ledger": report_dict["ledger"],
             "eval_tokens": eval_tokens,
@@ -344,7 +369,7 @@ def run_cell(
         _append_result(directory, record)
         if hook:
             hook("after_append", night)
-        _prune_checkpoints(roots, int(config.get("keep_checkpoints", 2)))
+        _prune_checkpoints(roots, int(config.get("keep_checkpoints", 1)))  # LATEST alone suffices to resume.
         with open(directory / "timing.jsonl", "a", encoding="utf-8") as stream:
             stream.write(json.dumps({"night": night, "seconds": time.time() - started}) + "\n")
         print(f"{cell.arm} seed {cell.seed} night {night} done in {time.time() - started:.0f}s", flush=True)
@@ -387,6 +412,7 @@ def evaluate_checkpoint(
         "night": night,
         "config_hash": stored["cell_hash"],
         "code_hash": code_identity(code_hash),
+        "versions": package_versions(),
         "world_fingerprint": world.fingerprint(),
         "metrics": metrics,
         "report": {},

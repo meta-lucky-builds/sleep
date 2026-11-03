@@ -18,7 +18,7 @@ from typing import Any, Optional, Sequence
 
 from ..config import derive_seed, make_generator
 from ..worlds.names import SeededRng
-from .answers import score_answer
+from .answers import normalize_answer, score_answer
 from .metrics import EvalConfig, Tally, eval_batch_size, generate_answers
 
 
@@ -55,6 +55,17 @@ def load_trivia_qa(limit: Optional[int] = None) -> list[dict]:
         if limit is not None and len(items) >= limit:
             break
     return items
+
+
+def usable_answers(answers: Sequence[str], min_chars: int = 3) -> list[str]:
+    """The main answer, plus aliases long enough not to match by accident (review L5).
+
+    Aliases are matched anywhere in the first sentence, so one like "A" or "US" would give false credit. The
+    first form is the dataset's own value and always stays, however short.
+    """
+    if not answers:
+        return []
+    return [answers[0]] + [a for a in answers[1:] if len(normalize_answer(a).replace(" ", "")) >= min_chars]
 
 
 def _atomic_write(path: str, payload: Any) -> None:
@@ -94,6 +105,7 @@ def build_capability(
                 for r in json.load(stream)
             ]
     raw = list(items) if items is not None else load_trivia_qa()
+    raw = [{"question": row["question"], "answers": usable_answers(row["answers"])} for row in raw]
     order = SeededRng(derive_seed(cfg.seed, 0, "capability:order")).shuffled(raw)[: cfg.n_candidates]
 
     kept: list[dict] = []
@@ -138,10 +150,17 @@ def evaluate_capability(
         cfg.temperature,
         make_generator(world_seed, night, "eval:capability"),
     )
-    overall, head, tail = Tally(), Tally(), Tally()
-    for item in items:
-        correct = float(score_answer(answers[(item.question, None)][0], item.answers).correct)
+    overall, head, tail, control, lift = Tally(), Tally(), Tally(), Tally(), Tally()
+    size = len(items)
+    for index, item in enumerate(items):
+        text = answers[(item.question, None)][0]
+        correct = float(score_answer(text, item.answers).correct)
+        # Real questions have no typed vocabulary, so the control is simply the next item's gold.
+        other = items[(index + 1) % size].answers if size > 1 else ()
+        permuted = float(score_answer(text, other).correct)
         overall.add(item.id, correct)
+        control.add(item.id, permuted)
+        lift.add(item.id, correct - permuted)
         (head if item.split == "head" else tail).add(item.id, correct)
     rate = overall.rate()
     metrics = {
@@ -149,7 +168,14 @@ def evaluate_capability(
         "ret_real_change": rate - 1.0 if rate is not None else None,
         "ret_real_head": head.rate(),
         "ret_real_tail": tail.rate(),
+        "ret_real_permuted": control.rate(),
+        "ret_real_lift": lift.rate(),
         "ret_real_n": len(overall),
     }
-    clusters = {"ret_real": overall.clusters, "ret_real_head": head.clusters, "ret_real_tail": tail.clusters}
+    clusters = {
+        "ret_real": overall.clusters,
+        "ret_real_head": head.clusters,
+        "ret_real_tail": tail.clusters,
+        "ret_real_lift": lift.clusters,
+    }
     return metrics, clusters

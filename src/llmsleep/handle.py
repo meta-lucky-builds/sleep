@@ -23,9 +23,17 @@ class PromptFormat:
     template: str = "Context: {context}\nQuestion: {query}\nAnswer:"
     empty_context: str = "(none)"
     answer_prefix: str = " "
+    chat: bool = False  # Instruct models: the handle wraps this text in the tokenizer's chat template.
+    chat_strip_suffix: str = "Answer:"  # The assistant turn replaces this cue.
 
     def render(self, query: str, context: Optional[str] = None) -> str:
         return self.template.format(context=context if context else self.empty_context, query=query)
+
+
+def is_instruct_model(model_id: str) -> bool:
+    """By the Hub naming convention. Instruct models get the chat template; base models raw completion (A1.10)."""
+    lowered = model_id.lower()
+    return "instruct" in lowered or "-chat" in lowered
 
 
 @dataclass
@@ -147,7 +155,11 @@ class ModelHandle:
         if pad_id is None:
             raise ValueError("tokenizer has neither a pad nor an EOS token")
         self.pad_id: int = int(pad_id)
+        self._newline_ids: Optional[set[int]] = None
+        self._grad_scaler: Any = None
         self.net.to(self.device)
+        if not self.fp16 and any(p.dtype == torch.float16 for p in self.net.parameters()):
+            self.net.float()  # fp16 weights without autocast would fail on mixed dtypes, e.g. on CPU.
         self.net.eval()
         parameters = inspect.signature(self.net.forward).parameters
         has_var_kw = any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values())
@@ -162,7 +174,14 @@ class ModelHandle:
     # ---- text ---------------------------------------------------------------------------------------
 
     def format(self, query: str, context: Optional[str] = None) -> str:
-        return self.prompt_format.render(query, context)
+        """The prompt, the same wrapper for every condition. Instruct models get it as a user turn."""
+        text = self.prompt_format.render(query, context)
+        if not self.prompt_format.chat:
+            return text
+        body = text.removesuffix(self.prompt_format.chat_strip_suffix).rstrip()
+        return self.tokenizer.apply_chat_template(
+            [{"role": "user", "content": body}], tokenize=False, add_generation_prompt=True
+        )
 
     def encode_prompt(self, text: str) -> list[int]:
         return list(self.tokenizer(text, add_special_tokens=True)["input_ids"])
@@ -172,16 +191,33 @@ class ModelHandle:
 
     def encode_answer(self, answer: str, add_eos: bool = True) -> list[int]:
         """Tokens of a gold answer as it should follow a prompt."""
-        ids = self.encode_continuation(self.prompt_format.answer_prefix + answer.strip())
+        prefix = "" if self.prompt_format.chat else self.prompt_format.answer_prefix  # An assistant turn starts clean.
+        ids = self.encode_continuation(prefix + answer.strip())
         return ids + [self.eos_id] if add_eos and self.eos_id is not None else ids
 
     def decode(self, ids: Sequence[int]) -> str:
         return self.tokenizer.decode(list(ids), skip_special_tokens=True)
 
     def start_ids(self) -> list[int]:
-        """A one-token prompt for unconditional text."""
+        """A one-token prompt for unconditional text. Never an end-of-turn token: on Instruct, `<|endoftext|>`."""
         bos = getattr(self.tokenizer, "bos_token_id", None)
-        return [int(bos if bos is not None else self.pad_id if self.eos_id is None else self.eos_id)]
+        if bos is not None:
+            return [int(bos)]
+        if self.prompt_format.chat:
+            return [self._end_of_text_id()]
+        return [int(self.pad_id if self.eos_id is None else self.eos_id)]
+
+    def text_end_ids(self) -> list[int]:
+        """What ends plain text, as opposed to a chat answer, which ends with the tokenizer's EOS."""
+        if self.prompt_format.chat:
+            return [self._end_of_text_id()]
+        return [self.eos_id] if self.eos_id is not None else []
+
+    def _end_of_text_id(self) -> int:
+        convert = getattr(self.tokenizer, "convert_tokens_to_ids", None)
+        found = convert("<|endoftext|>") if convert is not None else None
+        unknown = getattr(self.tokenizer, "unk_token_id", None)
+        return int(found) if found is not None and found != unknown else self.pad_id
 
     def _prompt_ids(self, prompt: TokenLike) -> list[int]:
         return self.encode_prompt(prompt) if isinstance(prompt, str) else list(prompt)
@@ -240,6 +276,12 @@ class ModelHandle:
             if checkpointing:
                 self.net.gradient_checkpointing_disable()
 
+    def grad_scaler(self) -> Any:
+        """One scaler for the run: a new one per loop restarts at 65536 and repeats the early skipped steps."""
+        if self.fp16 and self._grad_scaler is None:
+            self._grad_scaler = torch.amp.GradScaler(self.device.type)
+        return self._grad_scaler
+
     def forward_train(self, batch: TokenBatch) -> Tensor:
         """(B, T, V) logits with gradients. Charges forward and backward up front, padding-free."""
         tokens = int(batch.attention_mask.sum())
@@ -294,10 +336,13 @@ class ModelHandle:
         max_new_tokens: int,
         temperature: float = 1.0,
         generator: Optional[torch.Generator] = None,
+        answer_mode: bool = False,
     ) -> list[list[Sample]]:
         """n samples per prompt, under the active banks. Replaces HF generate, which uses global RNG.
 
         `generator` must be a CPU generator (see config.make_generator). temperature=0 is greedy.
+        `answer_mode` also stops at the first token whose text contains a newline (A1.9), so that the continuation
+        is the answer, not the invented questions a raw model runs on into. The stop token is part of the sample.
         """
         if generator is None:
             raise ValueError("sampling needs an explicit generator; the global RNG is never used")
@@ -308,14 +353,36 @@ class ModelHandle:
         out: list[list[Sample]] = [[] for _ in prompt_ids]
         for start in range(0, len(rows), self.batch_size):
             chunk = rows[start : start + self.batch_size]
-            samples = self._sample_batch([prompt_ids[i] for i in chunk], max_new_tokens, temperature, generator)
+            samples = self._sample_batch(
+                [prompt_ids[i] for i in chunk], max_new_tokens, temperature, generator, answer_mode
+            )
             for row, sample in zip(chunk, samples):
                 out[row].append(sample)
         return out
 
+    def _stop_ids(self, vocab_size: int, answer_mode: bool) -> set[int]:
+        if not answer_mode:
+            return self.eos_ids
+        if self._newline_ids is None:
+            # Once per process: a scan of the vocabulary, a few seconds at most on a real tokenizer.
+            self._newline_ids = set()
+            for token in range(vocab_size):
+                try:
+                    text = self.tokenizer.decode([token], skip_special_tokens=False)
+                except (IndexError, KeyError, TypeError, ValueError):  # Model vocabularies may exceed the tokenizer's.
+                    continue
+                if "\n" in text:
+                    self._newline_ids.add(token)
+        return self.eos_ids | self._newline_ids
+
     @torch.no_grad()
     def _sample_batch(
-        self, prompts: list[list[int]], max_new_tokens: int, temperature: float, generator: torch.Generator
+        self,
+        prompts: list[list[int]],
+        max_new_tokens: int,
+        temperature: float,
+        generator: torch.Generator,
+        answer_mode: bool = False,
     ) -> list[Sample]:
         batch = build_batch(prompts, [[] for _ in prompts], self.pad_id, "left").to(self.device)
         input_ids, attention = batch.input_ids, batch.attention_mask
@@ -326,6 +393,7 @@ class ModelHandle:
 
         self.ledger.charge(forward=int(attention.sum()))
         output = self._forward(input_ids, attention, batch.position_ids, use_cache=True)
+        stop_ids = self._stop_ids(output.logits.size(-1), answer_mode)
         for step in range(max_new_tokens):
             # Left padding puts every row's last real token in the final column, so -1 is right for all.
             last = output.logits[:, -1, :].float()  # (B, V)
@@ -345,7 +413,7 @@ class ModelHandle:
                 token = int(next_ids[row])
                 tokens[row].append(token)
                 logprobs[row] += float(log_probs[row, token])
-                if token in self.eos_ids:
+                if token in stop_ids:
                     finished[row] = True
             if step == max_new_tokens - 1 or bool(finished.all()):
                 break

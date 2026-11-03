@@ -150,7 +150,7 @@ def test_a_record_has_everything_the_design_asks_for(straight_run):
         assert record["eval_tokens"] > 0
         assert record["decision"]["accepted"] is True
         metrics = record["metrics"]
-        for name in ("acq_direct", "false_recall", "drift_generic", "delta_norm", "delta_rank", "style_length", "ret_real_n"):
+        for name in ("acq_direct", "taught_value_bleed", "drift_generic", "delta_norm", "delta_rank", "style_length", "ret_real_n"):
             assert name in metrics, name
     assert "entrench_pairs" in records[1]["metrics"] and "entrench_pairs" not in records[0]["metrics"]
 
@@ -193,11 +193,39 @@ def test_capability_cache_is_shared_on_disk(straight_run):
     assert list((root.parent / "_cache").glob("capability-*.json"))
 
 
-def test_old_checkpoints_are_pruned(tmp_path):
-    config = smoke_config(nights=3, keep_checkpoints=1)
-    directory = run_cell(config, tmp_path)
+def test_a_cell_keeps_one_checkpoint_by_default(tmp_path):
+    directory = run_cell(smoke_config(nights=3), tmp_path)
     names = sorted(p.name for p in (directory / "checkpoints").iterdir() if p.is_dir())
     assert names == ["night-00003"]
+
+
+def test_each_record_says_which_packages_made_it(straight_run):
+    for row in runner.read_results(straight_run / "results.jsonl"):
+        assert row["versions"]["python"] and row["versions"]["torch"] and row["versions"]["transformers"]
+
+
+def test_chat_follows_the_model_not_the_config(tmp_path):
+    config = smoke_config()
+    base = runner.Cell("Qwen/Qwen2.5-0.5B", "default", "B3_replay", 3)
+    instruct = runner.Cell("Qwen/Qwen2.5-0.5B-Instruct", "default", "B3_replay", 3)
+    assert runner.build_cell_config(config, base, tmp_path)[1].model.chat is False
+    assert runner.build_cell_config(config, instruct, tmp_path)[1].model.chat is True
+
+
+def test_weights_are_fp16_only_where_autocast_runs(tmp_path):
+    seen = []
+
+    def recording(model_id, fp16):
+        seen.append(fp16)
+        return factory(model_id, fp16)
+
+    config = smoke_config()
+    config["night"]["model"]["fp16"] = True
+    cell = only_cell(config)
+    night_cfg = NightConfig.from_dict({"arm": cell.arm, **config["night"]})
+    world = runner.SyntheticWorld(WorldConfig(**config["world"]), cell.seed)
+    runner._prepare_state(night_cfg, cell, world, recording, "cpu")
+    assert seen == [False]
 
 
 # ---- matched arms --------------------------------------------------------------------------------------
@@ -353,13 +381,18 @@ def e0_config():
         },
         "batch_size": 8,
         "max_probes": 3,
+        "h1_probes": 3,
         "max_new_tokens": 3,
         "k": 2,
         "chd_tokens": 2,
+        "deployed": {
+            "k": 2, "chd_tokens": 2, "episodes": 2, "per_episode": 2, "model_samples": 1,
+            "model_max_new_tokens": 4, "temperature": 0.8,
+        },
     }
 
 
-FACTS = [{"question": "Is it?", "answer": "Yes", "alt": "No", "claim": "It is {value}."}]
+FACTS = [{"type": "place", "question": "Is it?", "answer": "Yes", "alt": "No", "claim": "It is {value}."}]
 
 
 def test_e0_writes_a_verdict_with_every_criterion(tmp_path):
@@ -372,7 +405,10 @@ def test_e0_writes_a_verdict_with_every_criterion(tmp_path):
     assert set(entry["h1"]) == {"h1_episode_auroc", "h1_lower_offset", "h1_known_auroc"}
     for criterion in list(entry["h0"].values()) + list(entry["h1"].values()):
         assert isinstance(criterion["passed"], bool)
-    assert "passed" in entry["names_unknown"]
+    assert "rejected" in entry["names_unknown"] and "by_type" in entry["h1"]["h1_known_auroc"]
+    assert {"h1_episode_auroc", "h1_lower_offset", "parse_rate"} <= set(entry["h1_deployed"])
+    assert entry["family"] == "base" and entry["prompting"] == "raw completion"
+    assert entry["tokens"] > 0 and entry["seconds"] >= 0
 
 
 def test_e0_skips_finished_candidates(tmp_path):
@@ -384,8 +420,8 @@ def test_e0_skips_finished_candidates(tmp_path):
     run_e0.run_e0(e0_config(), tmp_path, must_not_load, "cpu", FACTS)
 
 
-def _candidate(h0, h1=True, names=True):
-    return {"h0_passed": h0, "h1_passed": h1, "names_unknown": {"passed": names}}
+def _candidate(h0, h1=True, deployed=True, replace=()):
+    return {"h0_passed": h0, "h1_passed": h1, "h1_deployed_passed": deployed, "names_unknown": {"replace": list(replace)}}
 
 
 def test_verdict_chooses_the_smallest_passing_model():
@@ -394,10 +430,88 @@ def test_verdict_chooses_the_smallest_passing_model():
     assert result["chosen_model"] == "medium" and result["h1_action"] is None
     result = run_e0.verdict({"small": _candidate(True, h1=False)}, order)
     assert result["chosen_model"] == "small" and "control layer" in result["h1_action"]
+    result = run_e0.verdict({"small": _candidate(True, deployed=False)}, order)
+    assert "control layer" in result["h1_action"] and result["h1_passed_on_chosen"] is True
     result = run_e0.verdict({m: _candidate(False) for m in order}, order)
     assert result["chosen_model"] is None and "stop" in result["action"]
-    result = run_e0.verdict({"small": _candidate(True, names=False), "medium": _candidate(False)}, order)
+    result = run_e0.verdict({"small": _candidate(False), "medium": _candidate(False)}, order)
     assert result["chosen_model"] is None and result["not_run"] == ["large"]
+
+
+def test_name_familiarity_reports_but_never_gates():
+    """A1.10, and review H3: a lucky guess must not silently move the study to a bigger model."""
+    result = run_e0.verdict({"small": _candidate(True, replace=["Dara Quilmont"])}, ["small"])
+    assert result["chosen_model"] == "small" and result["names_to_replace"] == ["Dara Quilmont"]
+
+
+def test_verdict_reports_each_family_separately():
+    order = ["m-0.5B", "m-0.5B-Instruct", "m-1.5B", "m-1.5B-Instruct"]
+    candidates = {
+        "m-0.5B": _candidate(False),
+        "m-0.5B-Instruct": _candidate(True),
+        "m-1.5B": _candidate(True),
+        "m-1.5B-Instruct": _candidate(True),
+    }
+    result = run_e0.verdict(candidates, order)
+    assert result["chosen_model"] == "m-0.5B-Instruct"
+    assert result["chosen_by_family"] == {"base": "m-1.5B", "instruct": "m-0.5B-Instruct"}
+
+
+def test_known_versus_fictional_compares_within_a_type():
+    facts = run_e0.load_real_facts()
+    assert len(facts) >= 30
+    assert {f["type"] for f in facts} <= set(run_e0.ATTR_TYPE.values())
+    assert {f["type"] for f in facts} == {"place", "thing", "person", "number"}
+
+
+# ---- smoke ----------------------------------------------------------------------------------------------
+
+
+def test_tokens_after_answer_line():
+    assert run_e0.tokens_after_answer_line([5, 6, 7], {9}) == 0
+    assert run_e0.tokens_after_answer_line([5, 9, 7, 8], {9}) == 2
+    assert run_e0.tokens_after_answer_line([5, 9], {9}) == 0
+
+
+def test_newline_tokens_are_found():
+    tok = TinyTokenizer()
+    found = run_e0.newline_token_ids(tok)
+    assert tok("\n", add_special_tokens=False)["input_ids"][0] in found and len(found) == 1
+
+
+def test_smoke_runs_every_check_on_cpu_and_writes_its_json(tmp_path):
+    report = run_e0.run_smoke("tiny/gpt2", e0_config(), tmp_path, factory, "cpu")
+    stored = json.loads((tmp_path / "smoke_tiny__gpt2.json").read_text(encoding="utf-8"))
+    assert stored == json.loads(json.dumps(report))
+    checks = report["checks"]
+    assert set(checks) == {
+        "logprob_match", "logits_finite", "raw_completions", "answer_stop", "question_parse", "training_step",
+    }
+    for name in ("logprob_match", "logits_finite", "raw_completions", "answer_stop", "training_step"):
+        assert checks[name]["passed"] is True, (name, checks[name])
+    assert report["fp16"] is False and len(report["completions"]) == 20
+    assert report["question_sets"] and "parse_rate" in checks["question_parse"]
+    assert "mean_tokens_after_answer_line" in checks["raw_completions"]
+    assert checks["training_step"]["fresh_moved"] and checks["training_step"]["base_unchanged"]
+
+
+def test_a_crash_in_one_check_is_recorded_and_the_rest_go_on():
+    checks: dict = {}
+
+    def broken():
+        raise ValueError("no")
+
+    run_e0._check(checks, "bad", broken)
+    run_e0._check(checks, "good", lambda: {"passed": True})
+    assert checks["bad"]["passed"] is False and "no" in checks["bad"]["error"] and checks["good"]["passed"]
+
+
+def test_e0_workflow_is_manual_and_bounded():
+    text = (ROOT / ".github" / "workflows" / "e0.yml").read_text(encoding="utf-8")
+    triggers = text.split("permissions:")[0]
+    assert "workflow_dispatch" in triggers and "push:" not in triggers and "pull_request" not in triggers
+    assert "timeout-minutes: 350" in text and "HF_HUB_DISABLE_TELEMETRY" in text and "secrets." not in text
+    assert "actions/cache" in text and "upload-artifact" in text and "whl/cpu" in text
 
 
 # ---- the decision rule, on fabricated records ------------------------------------------------------------
@@ -410,10 +524,12 @@ def clusters(rate, n=40):
 
 
 def record(arm, seed, night, count_source="chd", role="confirmatory", **rates):
+    """Each metric comes with a lift equal to itself: a zero chance control, unless a test says otherwise."""
     metrics = {"per_cluster": {}}
     for name, rate in rates.items():
         metrics[name] = rate
-        metrics["per_cluster"][analyze.CLUSTER_KEY.get(name, name)] = clusters(rate)
+        metrics["per_cluster"][name] = clusters(rate)
+        metrics["per_cluster"][f"{name}_lift"] = clusters(rate)
     return {
         "arm": arm,
         "world_seed": seed,
@@ -439,19 +555,28 @@ def _h3_rows(seeds=5, full=0.6, noselect=0.4, **kwargs):
 
 
 def test_clear_win_with_five_seeds_is_confirmatory_and_supported():
-    result = analyze.evaluate_hypotheses(group_of(_h3_rows()), n_boot=200)["H3"]
+    result = analyze.evaluate_hypotheses(group_of(_h3_rows()), n_boot=400)["H3"]
     assert result["status"] == "supported" and result["label"] == "confirmatory"
     assert result["result"]["estimate"] == pytest.approx(0.2, abs=1e-6)
 
 
+def test_margin_applies_to_lift_not_to_raw_accuracy():
+    """A1.3: a 20-point raw gap that the chance control explains is no win."""
+    rows = _h3_rows()
+    for row in rows:
+        row["metrics"]["per_cluster"]["acq_implied_lift"] = clusters(0.1)
+    result = analyze.evaluate_hypotheses(group_of(rows), n_boot=400)["H3"]
+    assert result["status"] == "not supported" and result["result"]["estimate"] == 0.0
+
+
 def test_fewer_than_five_seeds_is_always_exploratory():
-    result = analyze.evaluate_hypotheses(group_of(_h3_rows(seeds=3)), n_boot=200)["H3"]
+    result = analyze.evaluate_hypotheses(group_of(_h3_rows(seeds=3)), n_boot=400)["H3"]
     assert result["status"] == "supported" and result["label"] == "exploratory"
     assert any("seeds" in reason for reason in result["reasons"])
 
 
 def test_fraction_counts_are_refused_as_confirmatory():
-    result = analyze.evaluate_hypotheses(group_of(_h3_rows(count_source="fraction")), n_boot=200)["H3"]
+    result = analyze.evaluate_hypotheses(group_of(_h3_rows(count_source="fraction")), n_boot=400)["H3"]
     assert result["label"] == "exploratory"
     assert any("fractions" in reason for reason in result["reasons"])
 
@@ -464,21 +589,137 @@ def test_pilot_seeds_are_refused_as_confirmatory():
 
 
 def test_below_margin_is_not_supported():
-    result = analyze.evaluate_hypotheses(group_of(_h3_rows(full=0.5, noselect=0.475)), n_boot=200)["H3"]
+    result = analyze.evaluate_hypotheses(group_of(_h3_rows(full=0.5, noselect=0.475)), n_boot=400)["H3"]
     assert result["status"] == "not supported"
 
 
+# ---- A1.7: validity ----------------------------------------------------------------------------------------
+
+
+def _label(rows):
+    return analyze.run_label(group_of(rows), ("S_full", "S_noselect"), 5)
+
+
+def test_unequal_nights_force_exploratory():
+    rows = _h3_rows()
+    rows.append(record("S_full", 0, 9, acq_implied=0.6))
+    label, reasons = _label(rows)
+    assert label == "exploratory" and any("unequal" in reason for reason in reasons)
+
+
+def test_differing_world_fingerprints_force_exploratory():
+    rows = _h3_rows()
+    assert _label(rows)[0] == "confirmatory"
+    rows[0]["world_fingerprint"] = "a"
+    rows[1]["world_fingerprint"] = "b"
+    label, reasons = _label(rows)
+    assert label == "exploratory" and any("fingerprints" in reason for reason in reasons)
+
+
+def test_low_acceptance_forces_exploratory():
+    rows = _h3_rows()
+    for index, row in enumerate(r for r in rows if r["arm"] == "S_full"):
+        row["decision"] = {"accepted": index == 0}
+    label, reasons = _label(rows)
+    assert label == "exploratory" and any("acceptance" in reason for reason in reasons)
+    assert analyze.validity_row(group_of(rows), "S_full")["acceptance"] == pytest.approx(0.2)
+
+
+def test_high_unscored_fraction_forces_exploratory():
+    rows = _h3_rows()
+    for row in rows:
+        if row["arm"] == "S_full":
+            row["report"]["selection"]["train"] = {"integrate": 3, "anchor": 1, "discarded": {"unscored": 6}}
+            row["report"]["selection"]["unscored_fraction"] = 0.6
+            row["report"]["signals"] = {"gate_rate": 0.1}
+            row["report"]["synthesis"] = {"pairs": {"chains_chosen": 4}}
+    label, reasons = _label(rows)
+    assert label == "exploratory" and any("unscored" in reason for reason in reasons)
+    row = analyze.validity_row(group_of(rows), "S_full")
+    assert row["unscored"] == pytest.approx(0.6) and row["integrate_per_night"] == pytest.approx(3.0)
+    assert row["gate_rate"] == pytest.approx(0.1) and row["chains_per_night"] == pytest.approx(4.0)
+
+
+def test_anchor_drift_distribution_is_tabulated_for_calibration():
+    rows = []
+    for night, drift in enumerate((0.1, 0.2, 0.3, None)):
+        row = record("S_full", 0, night)
+        row["decision"] = {"accepted": True, "anchor_drift": drift, "control_drop": 0.5}
+        rows.append(row)
+    table = analyze.anchor_drift_table(group_of(rows))
+    assert table == [{"arm": "S_full", "nights": 3, "min": 0.1, "median": 0.2, "p90": 0.3, "max": 0.3}]
+    assert analyze.validity_row(group_of(rows), "S_full")["control_drop"] == pytest.approx(0.5)
+
+
+def test_validity_table_reads_the_ledger_and_tolerates_frozen_arms():
+    frozen = record("B0_frozen", 0, 0, acq_direct=0.1)
+    frozen["decision"] = {}
+    frozen["ledger"] = {"allowance": 1000, "spent": 0}
+    full = record("S_full", 0, 0, acq_direct=0.5)
+    full["decision"] = {"accepted": True}
+    full["ledger"] = {"allowance": 1000, "spent": 900}
+    group = group_of([frozen, full])
+    assert analyze.validity_row(group, "B0_frozen")["acceptance"] is None
+    assert analyze.validity_row(group, "S_full")["spent_fraction"] == pytest.approx(0.9)
+
+
+# ---- hypotheses --------------------------------------------------------------------------------------------
+
+
+def _h2_rows(reverse=0.6, alias=0.6, twohop=0.6, retention=0.9):
+    rows = []
+    for seed in range(5):
+        rows.append(record("S_nopair", seed, 0, acq_reverse=reverse, acq_alias=alias, ret_real=retention))
+        rows.append(record("B4_replay_kl", seed, 0, acq_reverse=0.4, acq_alias=0.4, ret_real=0.9))
+        rows.append(record("S_full", seed, 0, acq_twohop=twohop, ret_real=0.9))
+        rows.append(record("B3_pairs", seed, 0, acq_twohop=0.4, ret_real=0.9))
+    return rows
+
+
+def test_h2_is_three_tests_on_the_amended_arms():
+    """A1.2: the teacher is judged without pairs, and two-hop against the pair baseline."""
+    group = group_of(_h2_rows())
+    reverse = analyze.h2_member(group, "acq_reverse", "S_nopair", "B4_replay_kl", 200, 0)
+    alias = analyze.h2_member(group, "acq_alias", "S_nopair", "B4_replay_kl", 200, 0)
+    twohop = analyze.h2_member(group, "acq_twohop", "S_full", "B3_pairs", 200, 0)
+    assert (reverse["status"], alias["status"], twohop["status"]) == ("supported",) * 3
+    entries = analyze.evaluate_hypotheses(group, n_boot=1000)
+    assert entries["H2_reverse"]["arms"] == ["S_nopair", "B4_replay_kl"]
+    assert entries["H2_twohop"]["arms"] == ["S_full", "B3_pairs"]
+    assert entries["H2"]["status"] == "supported"
+
+
+def test_h2_as_a_whole_needs_all_three_members():
+    entries = analyze.evaluate_hypotheses(group_of(_h2_rows(alias=0.4)), n_boot=1000)
+    assert entries["H2_alias"]["status"] == "not supported"
+    assert entries["H2_reverse"]["status"] == "supported" and entries["H2"]["status"] == "not supported"
+
+
 def test_h2_needs_retention_not_worse():
+    group = group_of(_h2_rows(retention=0.5))
+    assert analyze.h2_member(group, "acq_reverse", "S_nopair", "B4_replay_kl", 100, 0)["status"] == "not supported"
+
+
+def test_h7_uses_twohop():
     rows = []
     for seed in range(5):
-        rows.append(record("S_full", seed, 0, acq_implied=0.6, ret_real=0.5))
-        rows.append(record("B4_replay_kl", seed, 0, acq_implied=0.4, ret_real=0.9))
-    assert analyze.h2(group_of(rows), 100, 0)["status"] == "not supported"
-    rows = []
-    for seed in range(5):
-        rows.append(record("S_full", seed, 0, acq_implied=0.6, ret_real=0.9))
-        rows.append(record("B4_replay_kl", seed, 0, acq_implied=0.4, ret_real=0.9))
-    assert analyze.h2(group_of(rows), 100, 0)["status"] == "supported"
+        rows.append(record("S_full", seed, 0, acq_twohop=0.6))
+        rows.append(record("S_nopair", seed, 0, acq_twohop=0.2))
+    assert analyze.evaluate_hypotheses(group_of(rows), n_boot=400)["H7"]["metric"] == "acq_twohop"
+
+
+def test_missing_hypotheses_count_as_p_one_in_holm():
+    """A1.7, review M10: a partial run must not look stronger through a smaller family."""
+    entries = analyze.evaluate_hypotheses(group_of(_h3_rows()), n_boot=400)
+    assert entries["H3"]["p_holm"] == pytest.approx(entries["H3"]["p"] * len(analyze.HOLM_FAMILY))
+    assert entries["H5"]["status"] == "missing" and entries["H5"]["p_holm"] == 1.0
+
+
+def test_holm_can_remove_support():
+    entries = analyze.evaluate_hypotheses(group_of(_h3_rows()), n_boot=100)  # p = 0.01, times eight members.
+    assert entries["H3"]["status"] == "not supported"
+    assert any("Holm" in reason for reason in entries["H3"]["reasons"])
+    assert entries["H2"]["status"] == "missing" and entries["H9"]["status"] == "not measured"
 
 
 def test_h4_needs_the_gap_to_widen():
@@ -498,13 +739,13 @@ def test_h4_needs_the_gap_to_widen():
 def test_h5_needs_non_inferiority_and_bounded_rank():
     def rows_for(loss, final_rank):
         rows = []
+        accuracy = {"acq_direct": 0.7, "acq_reverse": 0.5, "acq_alias": 0.5, "acq_twohop": 0.5}
         for seed in range(5):
             for night, rank in ((0, 100), (5, 200), (9, final_rank)):
-                common = {"acq_direct": 0.7, "acq_implied": 0.5, "ret_real": 0.9 - loss}
-                full = record("S_full", seed, night, **common)
+                full = record("S_full", seed, night, ret_real=0.9 - loss, **accuracy)
                 full["metrics"]["delta_rank"] = rank
                 rows.append(full)
-                rows.append(record("S_nocompact", seed, night, acq_direct=0.7, acq_implied=0.5, ret_real=0.9))
+                rows.append(record("S_nocompact", seed, night, ret_real=0.9, **accuracy))
         return rows
 
     assert analyze.h5(group_of(rows_for(0.0, 220)), 200, 0)["status"] == "supported"
@@ -521,27 +762,34 @@ def test_h6_is_within_arm_and_needs_both_arms():
     assert analyze.h6(group_of(rows[::2]), 200, 0)["status"] == "missing"  # B3 alone.
 
 
-def test_h8_thresholds():
-    def rows_for(value, false_rate):
+def test_h8_thresholds_and_not_measured_without_retirements():
+    def rows_for(value, false_rate, retired=10):
         rows = []
         for seed in range(5):
             row = record("S_full", seed, 9)
-            row["metrics"].update(audit_auroc=value, false_retirement=false_rate)
+            row["metrics"].update(audit_auroc=value, false_retirement=false_rate, retired=retired)
             rows.append(row)
         return rows
 
     assert analyze.h8(group_of(rows_for(0.8, 0.05)))["status"] == "supported"
     assert analyze.h8(group_of(rows_for(0.7, 0.05)))["status"] == "not supported"
     assert analyze.h8(group_of(rows_for(0.8, 0.2)))["status"] == "not supported"
+    # Review M7: with no retirements its second clause would otherwise pass on no data.
+    assert analyze.h8(group_of(rows_for(0.9, None, retired=0)))["status"] == "not measured"
+    assert analyze.h8(group_of(rows_for(0.9, 0.0, retired=1)))["status"] == "not measured"
 
 
-def test_holm_can_remove_support():
-    entries = analyze.evaluate_hypotheses(group_of(_h3_rows()), n_boot=200)
-    assert entries["H3"]["p_holm"] is not None
-    assert entries["H2"]["status"] == "missing" and entries["H9"]["status"] == "not measured"
+def test_age_table_pools_seeds():
+    rows = []
+    for seed, hits in ((0, 3), (1, 1)):
+        row = record("S_full", seed, 9)
+        row["metrics"]["acq_by_age"] = {"0": [hits, 4], "9": [0, 4]}
+        rows.append(row)
+    table = analyze.age_table(group_of(rows))
+    assert table == [{"arm": "S_full", "age_0": 0.5, "age_9": 0.0}]
 
 
-def test_main_comparison_comes_first_and_analyze_reads_a_real_run(straight_run, capsys):
+def test_headline_is_the_pair_baseline_and_analyze_reads_a_real_run(straight_run, capsys):
     root = straight_run
     while root.name != "tiny__gpt2":
         root = root.parent
@@ -549,10 +797,13 @@ def test_main_comparison_comes_first_and_analyze_reads_a_real_run(straight_run, 
     assert list(summary) == ["tiny/gpt2/default"]
     analyze.main(["--results", str(root.parent), "--n-boot", "20"])
     output = capsys.readouterr().out
-    assert output.index("B3_replay versus S_full") < output.index("Hypotheses")
-    assert "exploratory" in output
+    assert output.index("S_full versus B3_pairs") < output.index("S_full versus B3_replay") < output.index("Hypotheses")
+    assert "exploratory" in output and "Validity" in output
     entry = summary["tiny/gpt2/default"]
     assert entry["table"][0]["arm"] == "B3_replay"
+    assert entry["validity"][0]["acceptance"] == 1.0
+    assert entry["by_age"][0]["arm"] == "B3_replay"
+    assert "taught_value_bleed" in entry["table"][0] and "false_recall_any_specific" in entry["table"][0]
 
 
 def test_a_partial_last_line_does_not_break_the_reader(tmp_path):
@@ -561,3 +812,14 @@ def test_a_partial_last_line_does_not_break_the_reader(tmp_path):
     path.parent.mkdir()
     path.write_text(json.dumps(good) + "\n" + '{"partial": ', encoding="utf-8")
     assert len(analyze.load_records(tmp_path)) == 1
+    assert len(runner.read_results(path)) == 1  # Review L6: the matched-arm reader too.
+
+
+def test_a_partial_source_line_means_no_matched_counts(tmp_path):
+    config = smoke_config(arms=("S_full", "S_noselect"), matched_arms={"S_noselect": "S_full"})
+    cells = {c.arm: c for c in runner.expand_cells(config)}
+    source = runner.cell_dir(tmp_path, cells["S_full"])
+    source.mkdir(parents=True)
+    line = {"night": 0, "report": {"selection": {"train": {"anchor": 0}, "heldout": {"anchor": 0}}}}
+    (source / "results.jsonl").write_text(json.dumps(line) + "\n" + '{"nig', encoding="utf-8")
+    assert runner.matched_selection(config, cells["S_noselect"], tmp_path, 2) is None

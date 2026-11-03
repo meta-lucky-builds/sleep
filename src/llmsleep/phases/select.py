@@ -1,7 +1,9 @@
 """Stage 1, second half: thresholds from a null distribution, and the partition of candidates.
 
 The null is CHD between two distractors, neither of which relates to the query: how much the answer moves
-when a context's content is swapped for equally irrelevant content. Thresholds are quantiles of it.
+when a context's content is swapped for equally irrelevant content. Thresholds are quantiles of it, in nats per
+answer token, since a sum over tokens would make a long hallucination outrank a short confident answer. Pairs
+have their own null, because two-episode contexts move answers differently from one-episode ones.
 """
 from __future__ import annotations
 
@@ -33,7 +35,7 @@ def lexical_overlap(query: str, text: str) -> float:
 
 @dataclass
 class Thresholds:
-    """In nats. `source`: "quantile"; "extremes" when the null is tiny; "none" when it is empty."""
+    """In nats per answer token. `source`: "quantile"; "extremes" when the null is tiny; "none" when empty."""
 
     integrate: Optional[float]
     anchor: Optional[float]
@@ -42,12 +44,15 @@ class Thresholds:
     null_size: int
 
 
+NO_THRESHOLDS = Thresholds(None, None, None, "none", 0)
+
+
 def thresholds_from_null(values: Sequence[float], cfg: SelectConfig) -> Thresholds:
     """Quantiles when the null is large enough. A tiny null cannot support quantiles, so use its extremes,
     which select only what clearly exceeds or falls below everything seen. An empty null selects nothing."""
     size = len(values)
     if size == 0:
-        return Thresholds(None, None, None, "none", 0)
+        return NO_THRESHOLDS
     null = torch.tensor(list(values), dtype=torch.float64)
     if size < cfg.min_null:
         low, high = float(null.min()), float(null.max())
@@ -61,29 +66,46 @@ def thresholds_from_null(values: Sequence[float], cfg: SelectConfig) -> Threshol
     )
 
 
+def draw_distractor(
+    candidate: Candidate, sampler: DistractorSampler, generator: torch.Generator, exclude: Sequence[str] = ()
+) -> tuple[Optional[str], tuple[str, ...]]:
+    """A context unrelated to the candidate, shaped like its own: two episodes for a pair. (text, ids used)."""
+    count = 2 if candidate.is_pair else 1
+    target = len(candidate.context) // count
+    used = list(exclude) + list(candidate.episode_ids)
+    picks: list[Episode] = []
+    for _ in range(count):
+        episode = sampler.sample(candidate.entities, target, generator, used)
+        if episode is None:
+            return None, ()
+        picks.append(episode)
+        used.append(episode.id)
+    return format_context(picks), tuple(e.id for e in picks)
+
+
 def null_distribution(
     handle: ModelHandle,
     candidates: Sequence[Candidate],
     sampler: DistractorSampler,
-    select_cfg: SelectConfig,
     signal_cfg: SignalConfig,
+    n: int,
     generator: torch.Generator,
     cache: Optional[SignalCache] = None,
 ) -> tuple[list[float], bool]:
-    """CHD(x; d1, d2) on a seeded subset of candidates. Returns (values, exhausted). Under active banks."""
+    """Per-token CHD(x; d1, d2) on a seeded subset of up to `n` candidates, under active banks. (values, exhausted)."""
     if not candidates:
         return [], False
     order = torch.randperm(len(candidates), generator=generator).tolist()
     items: list[tuple[str, Optional[str], Optional[str]]] = []
-    for index in order[: select_cfg.n_null]:
-        c = candidates[index]
-        first = sampler.sample(c.entities, len(c.context), generator, c.episode_ids)
+    for index in order[:n]:
+        candidate = candidates[index]
+        first, first_ids = draw_distractor(candidate, sampler, generator)
         if first is None:
             continue
-        second = sampler.sample(c.entities, len(first.text), generator, tuple(c.episode_ids) + (first.id,))
+        second, _ = draw_distractor(candidate, sampler, generator, first_ids)
         if second is None:
             continue
-        items.append((c.query, format_context([first]), format_context([second])))
+        items.append((candidate.query, first, second))
     values, exhausted = chd_safe(
         handle, items, signal_cfg.k, signal_cfg.max_new_tokens, generator, cache, signal_cfg.chunk
     )
@@ -110,52 +132,51 @@ def partition(
     candidates: Sequence[Candidate],
     values: Sequence[Optional[float]],
     thresholds: Thresholds,
-    lexical_min: float,
+    pair_thresholds: Optional[Thresholds] = None,
 ) -> Partition:
-    """High CHD: integrate. Low CHD and lexically near its context: anchor. Everything else: discard."""
+    """Tonight's queries integrate on high CHD. Pool queries (which name nothing of tonight's) anchor on low CHD.
+
+    A query about tonight's episode never anchors, whatever its CHD: a germline target there would pull
+    against the hard labels for the same fact, and learning it would read as drift.
+    """
     out = Partition()
     for candidate, value in zip(candidates, values):
+        limits = pair_thresholds if candidate.is_pair and pair_thresholds is not None else thresholds
         if not candidate.context:
             out.discarded["no_context"] += 1
         elif candidate.distractor is None:
             out.discarded["no_distractor"] += 1
         elif value is None:
             out.discarded["unscored"] += 1
-        elif thresholds.integrate is None or thresholds.anchor is None:
+        elif limits.integrate is None or limits.anchor is None:
             out.discarded["no_null"] += 1
-        elif value > thresholds.integrate:
-            out.integrate.append(candidate)
-        elif value <= thresholds.anchor:
-            if lexical_overlap(candidate.query, candidate.context) >= lexical_min:
+        elif candidate.pool:
+            if value <= limits.anchor:
                 out.anchor.append(candidate)
             else:
-                out.discarded["low_chd_far"] += 1
+                out.discarded["pool_not_low"] += 1
+        elif value > limits.integrate:
+            out.integrate.append(candidate)
         else:
-            out.discarded["mid_chd"] += 1
+            out.discarded["low_or_mid_chd"] += 1
     return out
 
 
 def uniform_partition(
     candidates: Sequence[Candidate],
-    n_integrate: int,
+    pool: Sequence[Candidate],
     n_anchor: int,
-    lexical_min: float,
     generator: torch.Generator,
 ) -> Partition:
-    """The same partition without CHD. Anchors are drawn uniformly from the lexically near candidates, then
-    integrate queries uniformly from what is left. Anchors go first because only near queries qualify, so
-    both counts are met whenever the set allows. Any shortfall shows in the summary."""
+    """The partition without CHD: all usable queries integrate, and anchors are a uniform draw from the pool."""
     out = Partition()
-    usable = [c for c in candidates if c.context]
-    if len(usable) < len(candidates):
-        out.discarded["no_context"] += len(candidates) - len(usable)
-    shuffled = [usable[i] for i in torch.randperm(len(usable), generator=generator).tolist()]
-    out.anchor = [c for c in shuffled if lexical_overlap(c.query, c.context) >= lexical_min][:n_anchor]
-    chosen = {id(c) for c in out.anchor}
-    out.integrate = [c for c in shuffled if id(c) not in chosen][:n_integrate]
-    not_drawn = len(usable) - len(out.anchor) - len(out.integrate)
-    if not_drawn:
-        out.discarded["not_drawn"] += not_drawn
+    out.integrate = [c for c in candidates if c.context]
+    if len(out.integrate) < len(candidates):
+        out.discarded["no_context"] += len(candidates) - len(out.integrate)
+    order = torch.randperm(len(pool), generator=generator).tolist()
+    out.anchor = [pool[i] for i in order[:n_anchor]]
+    if len(pool) > len(out.anchor):
+        out.discarded["pool_not_drawn"] += len(pool) - len(out.anchor)
     return out
 
 

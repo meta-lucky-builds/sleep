@@ -1,0 +1,77 @@
+name: e0
+
+# Manual only: these runs spend the account's Actions minutes. See configs/README.md for estimated CPU time.
+on:
+  workflow_dispatch:
+    inputs:
+      models:
+        description: Comma-separated Hugging Face model ids
+        required: true
+        default: Qwen/Qwen2.5-0.5B
+      smoke:
+        description: Run the smoke checks instead of E0
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      models: ${{ steps.split.outputs.models }}
+    steps:
+      - id: split
+        env:
+          MODELS: ${{ inputs.models }}
+        # Standard library only: this turns the input into the JSON list the matrix needs.
+        run: |
+          python3 -c 'import json, os; print("models=" + json.dumps([m.strip() for m in os.environ["MODELS"].split(",") if m.strip()]))' >> "$GITHUB_OUTPUT"
+
+  run:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        model: ${{ fromJson(needs.plan.outputs.models) }}
+    env:
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      HF_HOME: ${{ github.workspace }}/.hf-cache
+      MODEL: ${{ matrix.model }}
+      SMOKE: ${{ inputs.smoke }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install CPU torch
+        run: pip install "torch>=2.3" --index-url https://download.pytorch.org/whl/cpu
+      - name: Install the package
+        run: pip install -e .
+      - uses: actions/cache@v4
+        with:
+          path: .hf-cache
+          key: hf-${{ matrix.model }}-v1
+      - name: Name the artifact
+        # An artifact name may not contain a slash.
+        run: echo "TAG=${MODEL//\//__}" >> "$GITHUB_ENV"
+      - name: Run
+        run: |
+          set -o pipefail
+          mkdir -p runs/e0
+          flag=""
+          if [ "$SMOKE" = "true" ]; then flag="--smoke"; fi
+          python experiments/run_e0.py --config configs/e0.json --out runs/e0 --device cpu --models "$MODEL" $flag 2>&1 | tee "runs/e0/log-$TAG.txt"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e0-${{ env.TAG }}
+          path: runs/e0/
+          if-no-files-found: warn

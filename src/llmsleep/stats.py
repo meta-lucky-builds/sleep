@@ -8,6 +8,7 @@ tend to be too narrow. The PREREG rule specifies it, so it is what we use; the s
 """
 from __future__ import annotations
 
+import math
 from dataclasses import asdict, dataclass
 from typing import Mapping, Optional, Sequence
 
@@ -141,6 +142,16 @@ def holm(p_values: Mapping[str, Optional[float]]) -> dict[str, Optional[float]]:
         running = max(running, min(1.0, (size - rank) * value))
         out[key] = running
     return out
+
+
+def binomial_tail(hits: int, trials: int, chance: float) -> float:
+    """Exact one-sided P(X >= hits) for X ~ Binomial(trials, chance)."""
+    if hits <= 0:
+        return 1.0
+    total = 0.0
+    for count in range(hits, trials + 1):
+        total += math.comb(trials, count) * chance**count * (1.0 - chance) ** (trials - count)
+    return min(1.0, total)
 
 
 def auroc(labels: Sequence[int], scores: Sequence[float]) -> Optional[float]:

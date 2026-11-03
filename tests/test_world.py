@@ -13,7 +13,7 @@ from tiny import TinyTokenizer, fresh_gpt2_state, small_config
 
 from llmsleep.arms import get_arm
 from llmsleep.eval.answers import contains_term, normalize_tokens
-from llmsleep.eval.probes import select_probes
+from llmsleep.eval.probes import select_probes, stratified_sample
 from llmsleep.phases.night import run_night
 from llmsleep.phases.queries import WorldLike
 from llmsleep.worlds import SyntheticWorld, TemplateLeakError, WorldConfig, check_disjoint, edit_distance
@@ -324,6 +324,81 @@ def test_gold_includes_aliases():
     # The nickname reverse probe names the nickname, so echoing it back must not count.
     assert subject.value not in reverse.gold
     assert world.entities[subject.subject].name in reverse.gold
+
+
+def test_two_hop_and_alias_gold_match_facts_computed_without_the_probe_builder():
+    """Mutation 5 of the review. Expected gold comes from the raw facts and the template file only."""
+    world = small_world(n_persons=12)
+    templates = load_eval_templates()
+    entities = world.entities
+
+    def forms(value_id, value):
+        return set(entities[value_id].aliases) if value_id else {value}
+
+    expected_two_hop: dict[tuple[str, int], set] = {}
+    expected_alias: dict[tuple[str, int], set] = {}
+    for person in world.persons:
+        nickname = world.versions(f"{person.id}.nickname")[0].value
+        for first_attr, second_attr in (("employer", "hq_city"), ("hometown", "region")):
+            for link in world.versions(f"{person.id}.{first_attr}"):
+                answer = world.versions(f"{link.value_id}.{second_attr}")[0]
+                assert answer.subject == link.value_id and answer.value_id != link.value_id
+                query = templates["two_hop"][f"{first_attr}>{second_attr}"][0].format(subject=person.name)
+                expected_two_hop[(query, link.version)] = forms(answer.value_id, answer.value)
+        for attr in ("employer", "hometown", "instrument", "birth_year", "invention"):
+            for fact in world.versions(f"{person.id}.{attr}"):
+                query = templates["alias"][attr][0].format(alias=nickname)
+                expected_alias[(query, fact.version)] = forms(fact.value_id, fact.value)
+
+    two_hop = [p for p in world.probes if p.kind == "two_hop"]
+    alias = [p for p in world.probes if p.kind == "alias"]
+    assert two_hop and alias
+    for probe in two_hop:
+        version = 1 if probe.ripple else 0
+        assert set(probe.gold) == expected_two_hop[(probe.query, version)], probe.id
+    for probe in alias:
+        version = int(probe.id.rsplit("#", 1)[1])
+        assert set(probe.gold) == expected_alias[(probe.query, version)], probe.id
+    # The first hop's answer must not be accepted for a two-hop question.
+    for person in world.persons:
+        employer = world.versions(f"{person.id}.employer")[0]
+        query = templates["two_hop"]["employer>hq_city"][0].format(subject=person.name)
+        probe = next((p for p in two_hop if p.query == query and not p.ripple), None)
+        if probe is not None:
+            assert not set(entities[employer.value_id].aliases) & set(probe.gold)
+
+
+def test_permuted_gold_is_another_facts_of_the_same_type():
+    world = small_world(n_persons=12)
+    answerable = [p for p in world.probes if p.kind in ("direct", "reverse", "alias", "two_hop", "supersede")]
+    assert sum(bool(p.permuted) for p in answerable) > 0.8 * len(answerable)
+    vocabularies = {p.vocab: set(world.vocabulary(p.vocab)) for p in answerable}
+    for probe in answerable:
+        if probe.permuted:
+            assert not set(probe.permuted) & (set(probe.gold) | set(probe.stale)), probe.id
+            assert set(probe.permuted) & vocabularies[probe.vocab], probe.id
+
+
+def test_stratified_sample_covers_attributes_and_is_seeded():
+    world = small_world(n_persons=12)
+    direct = [p for p in world.probes if p.kind == "direct"]
+    chosen = stratified_sample(direct, 18, world.seed)
+    assert len(chosen) == 18 and len({p.id for p in chosen}) == 18
+    counts = {}
+    for probe in chosen:
+        counts[probe.vocab] = counts.get(probe.vocab, 0) + 1
+    assert set(counts) == {p.vocab for p in direct} and max(counts.values()) - min(counts.values()) <= 1
+    assert [p.id for p in chosen] == [p.id for p in stratified_sample(direct, 18, world.seed)]
+    assert len(stratified_sample(direct, None, world.seed)) == len(direct)
+    assert len(stratified_sample(direct, 10**6, world.seed)) == len(direct)
+
+
+def test_banned_tokens_are_never_issued():
+    first = small_world()
+    word = first.persons[0].name.split()[1]
+    second = small_world(banned_tokens=[word])
+    names = " ".join(e.name for e in second.entities.values()).split()
+    assert word not in names and second.fingerprint() != first.fingerprint()
 
 
 def test_false_recall_pool_is_fixed_from_night_zero():

@@ -55,6 +55,7 @@ class Candidate:
     context: str = ""
     distractor: Optional[str] = None
     context_ids: tuple[str, ...] = ()  # Episodes in `context`; under real retrieval, not always the source's.
+    pool: bool = False  # From the anchor pool: names nothing of tonight's episodes.
 
 
 def normalize_query(query: str) -> str:
@@ -85,6 +86,8 @@ def parse_questions(text: str) -> list[str]:
 class QueryGen(Protocol):
     def generate(self, episodes: Sequence[Episode], generator: torch.Generator) -> list[str]: ...
 
+    def usable_pair(self, a: Episode, b: Episode) -> bool: ...
+
 
 class TemplateQueryGen:
     """Oracle queries from the world. An upper bound on query quality; benchmark only."""
@@ -101,6 +104,10 @@ class TemplateQueryGen:
         else:
             raise ValueError("templates exist for one or two episodes")
         return dedupe(queries)[: self.per_episode]
+
+    def usable_pair(self, a: Episode, b: Episode) -> bool:
+        """Oracle templates exist only for true chains; any other pair would waste a slot under the cap."""
+        return bool(self.world.pair_template_queries(a, b))
 
 
 class ModelQueryGen:
@@ -121,22 +128,46 @@ class ModelQueryGen:
             queries.extend(parse_questions(self.handle.decode(sample.token_ids)))
         return dedupe(queries)[: self.cfg.per_episode]
 
+    def usable_pair(self, a: Episode, b: Episode) -> bool:
+        return True
+
+
+def is_chain(a: Episode, b: Episode) -> bool:
+    """One episode's value is the other's subject: entities list the subject first, then any named value."""
+    first, second = [x.casefold() for x in a.entities], [x.casefold() for x in b.entities]
+    if not first or not second:
+        return False
+    return second[0] in first[1:] or first[0] in second[1:]
+
 
 def choose_pairs(
     pairs: Sequence[tuple[Episode, Episode]], max_pairs: int, generator: torch.Generator
 ) -> list[tuple[Episode, Episode]]:
-    """Pairs linked across different nights first, then same-night ones, uniformly at random within each group.
+    """Chains first, then other pairs across nights, then same-night ones, uniformly at random within each group.
 
-    A cross-night pair is the one thing no single night's text can teach, and two-hop probes need it. Cutting a
-    sorted list would instead drop pairs by the accident of their ids, which would bias H7.
+    Two-hop probes need the chains, and most pairs are not chains. Cutting a sorted list would instead drop pairs by
+    the accident of their ids, which would bias H7.
     """
 
     def shuffled(group: list[tuple[Episode, Episode]]) -> list[tuple[Episode, Episode]]:
         return [group[i] for i in torch.randperm(len(group), generator=generator).tolist()]
 
-    cross = [(a, b) for a, b in pairs if a.night != b.night]
-    same = [(a, b) for a, b in pairs if a.night == b.night]
-    return (shuffled(cross) + shuffled(same))[:max_pairs]
+    chains = [(a, b) for a, b in pairs if is_chain(a, b)]
+    cross = [(a, b) for a, b in pairs if not is_chain(a, b) and a.night != b.night]
+    same = [(a, b) for a, b in pairs if not is_chain(a, b) and a.night == b.night]
+    return (shuffled(chains) + shuffled(cross) + shuffled(same))[:max_pairs]
+
+
+def pair_stats(pairs: Sequence[tuple[Episode, Episode]], chosen: Sequence[tuple[Episode, Episode]]) -> dict[str, int]:
+    """What the cap kept, including how many chains it covered tonight."""
+    return {
+        "available": len(pairs),
+        "chains_available": sum(1 for a, b in pairs if is_chain(a, b)),
+        "cross_night_available": sum(1 for a, b in pairs if a.night != b.night),
+        "chosen": len(chosen),
+        "chains_chosen": sum(1 for a, b in chosen if is_chain(a, b)),
+        "cross_night_chosen": sum(1 for a, b in chosen if a.night != b.night),
+    }
 
 
 class PairQueryGen:
@@ -152,13 +183,9 @@ class PairQueryGen:
     ) -> tuple[list[Candidate], bool]:
         """Pairs with at least one new episode. Returns (candidates so far, exhausted)."""
         pairs = [(a, b) for a, b in store.pairs_sharing_entity() if a.id in new_ids or b.id in new_ids]
+        pairs = [(a, b) for a, b in pairs if self.base.usable_pair(a, b)]  # Before the cap, so no slot is wasted.
         chosen = choose_pairs(pairs, self.max_pairs, generator)
-        self.stats = {
-            "available": len(pairs),
-            "cross_night_available": sum(1 for a, b in pairs if a.night != b.night),
-            "chosen": len(chosen),
-            "cross_night_chosen": sum(1 for a, b in chosen if a.night != b.night),
-        }
+        self.stats = pair_stats(pairs, chosen)
         out: list[Candidate] = []
         for a, b in chosen:
             try:
@@ -166,7 +193,8 @@ class PairQueryGen:
             except LedgerExhausted:
                 return out, True
             entities = tuple(dict.fromkeys(list(a.entities) + list(b.entities)))
-            out.extend(Candidate(q, (a.id, b.id), entities, is_pair=True) for q in queries)
+            context = format_context([a, b])  # Until retrieval runs; the pair null uses its length.
+            out.extend(Candidate(q, (a.id, b.id), entities, is_pair=True, context=context) for q in queries)
         return out, False
 
 
@@ -184,6 +212,63 @@ def generate_singles(
         context = format_context([episode])
         out.extend(Candidate(q, (episode.id,), tuple(episode.entities), context=context) for q in queries)
     return out, False
+
+
+def build_anchor_pool(
+    handle: ModelHandle,
+    store: EpisodicStore,
+    world: WorldLike,
+    new_ids: AbstractSet[str],
+    cfg: QueryConfig,
+    generator: torch.Generator,
+) -> tuple[list[Candidate], bool]:
+    """Queries that name no entity of tonight's episodes (A1.5). Returns (a uniform sample of them, exhausted).
+
+    Generated queries are about tonight's episodes, so anchors come from elsewhere: queries kept from earlier nights
+    (`meta["queries"]`), plus fresh model-generated ones over a seeded sample of older episodes and the distractor
+    pool. Fresh ones are always model-generated, since worlds have no templates for filler text.
+    """
+    tonight = {x.casefold() for episode_id in new_ids for x in store.get(episode_id).entities}
+    older = [e for e in store.replayable() if e.id not in new_ids]
+    found: dict[str, Candidate] = {}
+
+    def add(query: str, episode: Episode) -> None:
+        key = normalize_query(query)
+        lowered = query.casefold()
+        if key in found or any(name in lowered for name in tonight):
+            return
+        if {x.casefold() for x in episode.entities} & tonight:
+            return
+        found[key] = Candidate(
+            query,
+            (episode.id,),
+            tuple(episode.entities),
+            context=format_context([episode]),
+            context_ids=(episode.id,),
+            pool=True,
+        )
+
+    for episode in older:
+        for query in episode.meta.get("queries", []):
+            add(query, episode)
+
+    def sample(group: Sequence[Episode], n: int) -> list[Episode]:
+        return [group[i] for i in torch.randperm(len(group), generator=generator).tolist()[:n]]
+
+    sources = sample(older, cfg.anchor_older_episodes) + sample(
+        sorted(world.distractor_pool(), key=lambda e: e.id), cfg.anchor_distractor_episodes
+    )
+    gen = ModelQueryGen(handle, cfg)
+    exhausted = False
+    for episode in sources:
+        try:
+            queries = gen.generate([episode], generator)
+        except LedgerExhausted:
+            exhausted = True
+            break
+        for query in queries:
+            add(query, episode)
+    return sample(list(found.values()), cfg.anchor_pool_max), exhausted
 
 
 def make_query_gen(source: str, world: WorldLike, handle: ModelHandle, cfg: QueryConfig) -> QueryGen:

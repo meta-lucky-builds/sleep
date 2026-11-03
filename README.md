@@ -39,4 +39,4 @@ python experiments/analyze.py --results runs/e3
 `run.py` resumes where a killed session stopped: run the same command with the same `--out`. Pass `--code-hash` when
 there is no `.git`. Use `--arms` and `--seeds` to split a long experiment across sessions.
 
-Tests run in CI only: `pytest -q`.
+Tests run in CI only: `pytest -q`. E0 can also run on CPU in GitHub Actions: `.github/workflows/e0.yml`, started by hand, with a `smoke` option for the first real-model checks.

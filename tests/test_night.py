@@ -13,12 +13,12 @@ from tiny import TinyTokenizer, TinyWorld, fresh_gpt2_state, small_config, tiny_
 
 import llmsleep
 from llmsleep.arms import ARMS, ArmConfig, get_arm
-from llmsleep.config import CommitConfig, NightConfig, TeacherConfig, TrainConfig, derive_seed, make_generator
+from llmsleep.config import CommitConfig, NightConfig, QueryConfig, TeacherConfig, TrainConfig, derive_seed, make_generator
 from llmsleep.delta import COMMITTED, DeltaModel
 from llmsleep.handle import ModelHandle
 from llmsleep.ledger import ComputeLedger, LedgerExhausted
-from llmsleep.memory import Episode, EpisodicStore
-from llmsleep.phases.commit import AuditItem, decide, measure_drift, measure_gaps, update_episodes
+from llmsleep.memory import DistractorSampler, Episode, EpisodicStore
+from llmsleep.phases.commit import AuditItem, decide, drift_by_target, drift_change, measure_drift, measure_gaps, update_episodes
 from llmsleep.phases.consolidate import (
     HardExample,
     TargetSpec,
@@ -28,9 +28,21 @@ from llmsleep.phases.consolidate import (
     hard_examples,
     train_loop,
 )
-from llmsleep.phases.night import SleepPressure, State, active_stage_fractions, anchor_teacher, run_night
+from llmsleep.phases.night import (
+    SleepPressure,
+    State,
+    _gate_probe,
+    active_stage_fractions,
+    anchor_teacher,
+    hard_pool_examples,
+    run_night,
+)
 from llmsleep.phases.queries import (
     Candidate,
+    build_anchor_pool,
+    choose_pairs,
+    is_chain,
+    pair_stats,
     ModelQueryGen,
     PairQueryGen,
     TemplateQueryGen,
@@ -48,6 +60,7 @@ PREREG_ARMS = {
     "B1_rag",
     "B2_seq",
     "B3_replay",
+    "B3_pairs",
     "B4_replay_kl",
     "S_full",
     "S_oracleq",
@@ -86,6 +99,8 @@ def test_arm_flags_match_the_prereg_table():
     assert get_arm("B1_rag").open_book_eval and not get_arm("B0_frozen").open_book_eval
     assert get_arm("B2_seq").hard_pool == "new"
     assert get_arm("B3_replay").hard_pool == "all_real" and not get_arm("B3_replay").self_sampled_kl
+    assert get_arm("B3_pairs").replay_pairs and not get_arm("B3_replay").replay_pairs
+    assert get_arm("B3_pairs").query_source == "none" and get_arm("B3_pairs").anchors == "none"
     assert get_arm("B4_replay_kl").self_sampled_kl and get_arm("B4_replay_kl").anchors == "none"
     full = get_arm("S_full")
     assert full.query_source == "model" and full.selection and full.teacher_kl and full.anchors == "germline"
@@ -205,7 +220,7 @@ def test_noselect_credit_buys_more_training_tokens_when_steps_are_uncapped(token
     assert spent["S_noselect"] > spent["S_full"]
 
 
-def test_noselect_draws_integrate_and_anchors_at_matched_counts_without_chd(tokenizer, world, monkeypatch):
+def test_noselect_trains_on_all_queries_and_draws_matched_anchors_without_chd(tokenizer, world, monkeypatch):
     import llmsleep.phases.night as night_module
 
     def forbidden(*args, **kwargs):
@@ -215,37 +230,403 @@ def test_noselect_draws_integrate_and_anchors_at_matched_counts_without_chd(toke
     monkeypatch.setattr(night_module, "null_distribution", forbidden)
     cfg = small_config(replace(get_arm("S_noselect"), query_source="template"))
     cfg.select.matched_selection = {
-        "0": {"train": {"integrate": 2, "anchor": 1}, "heldout": {"integrate": 1, "anchor": 0}}
+        "1": {"train": {"integrate": 99, "anchor": 1}, "heldout": {"integrate": 99, "anchor": 0}}
     }
-    report = run_night(fresh_gpt2_state(cfg, world, tokenizer), cfg)
+    state = fresh_gpt2_state(cfg, world, tokenizer)
+    assert run_night(state, cfg).selection["count_source"] == "fraction"  # Night 0 is not in the matched record.
+    report = run_night(state, cfg)
     assert report.selection["count_source"] == "matched"
-    assert report.selection["train"]["integrate"] == 2 and report.selection["train"]["anchor"] == 1
-    assert report.selection["heldout"]["integrate"] == 1 and report.selection["heldout"]["anchor"] == 0
-    assert report.teacher["integrate_sequences"] == 2  # samples=1 in the small config.
+    assert report.selection["train"]["anchor"] == 1 and report.selection["heldout"]["anchor"] == 0
+    # A1.4: KL on all usable generated queries, however many the other arm integrated.
+    assert report.selection["train"]["integrate"] == report.synthesis["train_candidates"] > 0
+    assert report.teacher["integrate_sequences"] == report.synthesis["train_candidates"]  # samples=1 in the small config.
     assert report.teacher["anchor_sequences"] == 1
 
 
-def test_noselect_without_matched_counts_says_it_fell_back(tokenizer, world):
-    cfg = small_config(replace(get_arm("S_noselect"), query_source="template"))
-    report = run_night(fresh_gpt2_state(cfg, world, tokenizer), cfg)
-    assert report.selection["count_source"] == "fraction"
-    assert report.selection["train"]["anchor"] > 0
-
-
-def test_uniform_partition_is_near_only_for_anchors_disjoint_and_counts_everything():
-    near = [Candidate(f"Who is Mira{i}?", ("e",), ("M",), context=f"Mira{i} keeps kites.") for i in range(4)]
-    far = [Candidate(f"Name colour {i}?", ("e",), ("M",), context="Mira keeps kites.") for i in range(4)]
+def test_uniform_partition_integrates_everything_usable_and_draws_anchors_from_the_pool():
+    tonight = [Candidate(f"Who is Mira{i}?", ("e",), ("M",), context="Mira keeps kites.") for i in range(3)]
     empty = [Candidate("Who?", ("e",), ("M",))]
-    out = uniform_partition(near + far + empty, 3, 2, 0.5, torch.Generator().manual_seed(1))
-    assert len(out.integrate) == 3 and len(out.anchor) == 2
-    assert all(c in near for c in out.anchor)
-    assert not ({id(c) for c in out.integrate} & {id(c) for c in out.anchor})
-    assert dict(out.discarded) == {"no_context": 1, "not_drawn": 3}
-    # Deterministic, and a shortfall is visible rather than an error.
-    again = uniform_partition(near + far + empty, 3, 2, 0.5, torch.Generator().manual_seed(1))
-    assert [c.query for c in again.integrate] == [c.query for c in out.integrate]
-    short = uniform_partition(far, 0, 2, 0.5, torch.Generator().manual_seed(1))
-    assert short.anchor == [] and short.discarded["not_drawn"] == 4
+    pool = [Candidate(f"Who is Zed{i}?", ("o",), ("Z",), context="Zed sails.", pool=True) for i in range(4)]
+    out = uniform_partition(tonight + empty, pool, 2, torch.Generator().manual_seed(1))
+    assert out.integrate == tonight
+    assert len(out.anchor) == 2 and all(c in pool for c in out.anchor)
+    assert dict(out.discarded) == {"no_context": 1, "pool_not_drawn": 2}
+    again = uniform_partition(tonight + empty, pool, 2, torch.Generator().manual_seed(1))
+    assert [c.query for c in again.anchor] == [c.query for c in out.anchor]
+    assert uniform_partition(tonight, [], 5, torch.Generator()).anchor == []
+
+
+def _anchor_queries(monkeypatch) -> list:
+    """Record every anchor spec a night builds, on its way to `build_targets`."""
+    import llmsleep.phases.night as night_module
+
+    seen: list = []
+    original = night_module.build_targets
+
+    def recording(handle, specs, *args, **kwargs):
+        seen.append([spec for spec in specs if spec.kind == "anchor"])
+        return original(handle, specs, *args, **kwargs)
+
+    monkeypatch.setattr(night_module, "build_targets", recording)
+    return seen
+
+
+@pytest.mark.parametrize("selection", [True, False])
+def test_anchors_never_name_tonights_entities(selection, tokenizer, world, monkeypatch):
+    seen = _anchor_queries(monkeypatch)
+    arm = replace(get_arm("S_oracleq"), selection=selection, write_gate=selection)
+    cfg = small_config(arm)
+    cfg.select.matched_selection = None if selection else {"1": {"train": {"anchor": 3}, "heldout": {"anchor": 1}}}
+    cfg.select.anchor_null_q = 1.0  # Everything at or below the null's top: most of the pool, on a noise model.
+    state = fresh_gpt2_state(cfg, world, tokenizer)
+    run_night(state, cfg)
+    seen.clear()
+    run_night(state, cfg)
+    specs = [spec for batch in seen for spec in batch]
+    tonight = [e for episode in world.episodes(1) for e in episode.entities]
+    for spec in specs:
+        assert not any(name.casefold() in spec.query.casefold() for name in tonight)
+    if not selection:
+        assert specs  # The draw above is guaranteed; the CHD path depends on the noise model.
+
+
+def test_anchor_pool_excludes_tonight_and_uses_earlier_queries_and_older_entities():
+    tok = TinyTokenizer()
+    world = TinyWorld()
+    handle = ModelHandle(tiny_gpt2(tok.vocab_size), tok, "cpu", batch_size=4)
+    store = EpisodicStore()
+    store.add(Episode("old", "Zed sails.", 0, entities=["Zed"], meta={"queries": ["Who is Zed?", "Who sails with Ivo?"]}))
+    store.add(Episode("linked", "Ivo sails.", 0, entities=["Ivo"], meta={"queries": ["Who is Ivo?"]}))
+    store.add(Episode("gone", "Una sails.", 0, entities=["Una"], meta={"queries": ["Who is Una?"]}))
+    store.add(Episode("una2", "Una rows.", 1, entities=["Una2"], supersedes=["gone"]))
+    store.add(Episode("new", "Ivo rows.", 1, entities=["Ivo"], meta={"queries": ["Who rows?"]}))
+    pool, exhausted = build_anchor_pool(
+        handle, store, world, {"new"}, QueryConfig(model_samples=1, model_max_new_tokens=2), torch.Generator().manual_seed(1)
+    )
+    assert not exhausted
+    queries = {c.query for c in pool}
+    assert "Who is Zed?" in queries
+    assert "Who sails with Ivo?" not in queries  # It names an entity of tonight's.
+    assert "Who is Ivo?" not in queries  # Its episode is about one.
+    assert "Who is Una?" not in queries  # Superseded.
+    assert "Who rows?" not in queries  # Tonight's own.
+    assert all(c.pool and c.context for c in pool)
+
+
+def test_anchor_pool_generates_over_older_episodes_and_the_distractor_pool(monkeypatch):
+    import llmsleep.phases.queries as queries_module
+
+    sources: list[str] = []
+
+    class Recording:
+        def __init__(self, handle, cfg):
+            pass
+
+        def generate(self, episodes, generator):
+            sources.append(episodes[0].id)
+            return [f"About {episodes[0].id}?"]
+
+    monkeypatch.setattr(queries_module, "ModelQueryGen", Recording)
+    store = EpisodicStore()
+    store.add(Episode("old", "Zed sails.", 0, entities=["Zed"]))
+    store.add(Episode("new", "Ivo rows.", 1, entities=["Ivo"]))
+    pool, _ = build_anchor_pool(None, store, TinyWorld(), {"new"}, QueryConfig(), torch.Generator().manual_seed(1))
+    assert "old" in sources and "new" not in sources
+    assert any(s.startswith("filler") for s in sources)
+    assert any(c.episode_ids == ("old",) for c in pool)
+    capped, _ = build_anchor_pool(
+        None, store, TinyWorld(), {"new"}, QueryConfig(anchor_pool_max=2), torch.Generator().manual_seed(1)
+    )
+    assert len(capped) == 2
+
+
+def test_drift_is_tested_as_the_nights_increase_not_the_cumulative_level(tokenizer, world):
+    """C1: a big earlier delta must not freeze later nights. With lr 0 the increase is exactly zero."""
+    arm = replace(get_arm("S_oracleq"), selection=False, write_gate=False, compact=False)
+    cfg = small_config(arm)
+    cfg.commit = CommitConfig(min_gap_drop=-1e9, max_anchor_drift=1e-6)
+    cfg.select.matched_selection = {"1": {"train": {"anchor": 1}, "heldout": {"anchor": 1}}}
+    state = fresh_gpt2_state(cfg, world, tokenizer)
+    run_night(state, cfg)
+    _set_nonzero_fresh(state.handle.delta, magnitude=0.3)  # A large committed delta from "earlier nights".
+    state.handle.delta.merge_fresh_into_committed()
+    cfg.train = TrainConfig(lr=0.0, hard_batch=2, kl_batch=2, anchor_batch=2, max_steps=2)
+    report = run_night(state, cfg)
+    assert report.decision["anchor_drift_before"] > 1e-6  # An absolute test would have rejected this.
+    assert report.decision["anchor_drift"] == pytest.approx(0.0, abs=1e-9)
+    assert report.decision["accepted"]
+
+
+def test_drift_change_compares_only_targets_measured_twice():
+    before = [(2.0, 2), None, (9.0, 3)]
+    after = [(4.0, 2), (1.0, 1), None]
+    assert drift_change(before, after) == (1.0, 2.0)
+    assert drift_change([], []) == (None, None)
+
+
+def test_drift_by_target_splits_rows_by_length(tokenizer):
+    handle = ModelHandle(DeltaModel(tiny_gpt2(tokenizer.vocab_size), rank=2), tokenizer, "cpu", batch_size=2)
+    cfg = TeacherConfig(samples=3, max_new_tokens=4, top_k=4)
+    targets, _ = build_targets(handle, [TargetSpec("Who?", None, "germline", "anchor")], cfg, torch.Generator().manual_seed(1))
+    values, exhausted = drift_by_target(handle, targets)
+    assert not exhausted and [n for _, n in values] == [len(t.cont_ids) for t in targets]
+    mean, _ = measure_drift(handle, targets)
+    assert mean == pytest.approx(sum(s for s, _ in values) / sum(n for _, n in values))
+
+
+def test_control_must_fall_less_than_the_gap():
+    cfg = CommitConfig(max_anchor_drift=1.0, min_gap_drop=0.0)
+    assert decide([2.0], [1.0], None, cfg, True, False, [2.0], [1.5]).reasons == ["passed"]  # 1.0 > 0.5.
+    failing = decide([2.0], [1.0], None, cfg, True, False, [2.0], [0.5])  # All answers moved: 1.0 < 1.5.
+    assert failing.reasons == ["gap_did_not_fall"] and failing.control_drop == pytest.approx(1.5)
+    assert decide([2.0], [1.0], None, cfg, True, False, [], []).reasons == ["no_control_data"]
+    assert decide([2.0], [1.0], None, cfg, True, False, [None], [1.0]).reasons == ["no_control_data"]
+
+
+def test_audit_flags_with_an_independent_seed_and_measures_a_control(tokenizer, world, monkeypatch):
+    import llmsleep.phases.night as night_module
+
+    calls: list = []
+    original = night_module.measure_gaps
+
+    def recording(handle, items, seed, night, k, m, purpose="audit"):
+        calls.append((purpose, list(items)))
+        return original(handle, items, seed, night, k, m, purpose)
+
+    monkeypatch.setattr(night_module, "measure_gaps", recording)
+    cfg = small_config(get_arm("S_oracleq"))
+    run_night(fresh_gpt2_state(cfg, world, tokenizer), cfg)
+    assert calls[0][0] == "audit_flag"
+    audited = [items for purpose, items in calls if purpose == "audit"]
+    assert len(audited) == 4  # Items and control, before and after.
+    assert audited[0] == audited[2] and audited[1] == audited[3]  # Identical sets at both times.
+    for item in audited[1]:  # The control: two contexts, neither about the query's entities.
+        assert item.episode_ids == ()
+        names = re.findall(r"Mira\d+", item.query)
+        assert not any(name in item.context or name in item.distractor for name in names)
+
+
+def test_flagging_and_before_measurements_use_different_samples(tokenizer):
+    handle = ModelHandle(tiny_gpt2(tokenizer.vocab_size), tokenizer, "cpu", batch_size=4)
+    items = [AuditItem("Who?", "Mira keeps kites.", "Tides rise.", ("e",))]
+    first, _ = measure_gaps(handle, items, 1, 0, 4, 6)
+    same, _ = measure_gaps(handle, items, 1, 0, 4, 6)
+    other, _ = measure_gaps(handle, items, 1, 0, 4, 6, "audit_flag")
+    assert first == same and first != other
+
+
+def test_old_items_keep_their_slots_under_the_audit_cap(tokenizer, world, monkeypatch):
+    import llmsleep.phases.night as night_module
+
+    calls: list = []
+    original = night_module.measure_gaps
+
+    def recording(handle, items, seed, night, k, m, purpose="audit"):
+        calls.append(list(items))
+        return original(handle, items, seed, night, k, m, purpose)
+
+    monkeypatch.setattr(night_module, "measure_gaps", recording)
+    cfg = _select_all_config()
+    cfg.commit = CommitConfig(min_gap_drop=-1e9, max_anchor_drift=1e9, heldout_frac=0.5, audit_max_items=2, old_item_share=0.5)
+    state = fresh_gpt2_state(cfg, world, tokenizer)
+    run_night(state, cfg)
+    calls.clear()
+    run_night(state, cfg)
+    assert len(calls[0]) <= 2
+    assert any(item.episode_ids[0].startswith("n0") for item in calls[0])
+
+
+def test_write_gate_probes_one_query_per_episode(world):
+    episode = world.episodes(0)[0]
+    candidates = [
+        Candidate(q, (episode.id,), tuple(episode.entities), context=episode.text)
+        for q in world.template_queries(episode)
+    ]
+    sampler = DistractorSampler(world.distractor_pool())
+    assert len(_gate_probe(episode, candidates, sampler, torch.Generator().manual_seed(1))) == 1
+    assert _gate_probe(world.episodes(0)[1], candidates, sampler, torch.Generator()) == []
+
+
+def test_scoring_mixes_singles_and_pairs_and_reports_unscored(tokenizer, monkeypatch):
+    import llmsleep.phases.night as night_module
+
+    class ManyPairQueries(TinyWorld):
+        def pair_template_queries(self, a, b):
+            return [f"Together {i}, how many kites have {a.entities[0]} and {b.entities[0]}?" for i in range(8)]
+
+    seen: list = []
+    original = night_module.chd_safe
+
+    def recording(handle, items, *args, **kwargs):
+        seen.append(list(items))
+        return original(handle, items, *args, **kwargs)
+
+    monkeypatch.setattr(night_module, "chd_safe", recording)
+    cfg = small_config(get_arm("S_oracleq"))
+    cfg.queries.per_episode = 8
+    report = run_night(fresh_gpt2_state(cfg, ManyPairQueries(), tokenizer), cfg)
+    order = [query for query, _, _ in seen[0]]
+    pair_positions = [i for i, q in enumerate(order) if q.startswith("Together")]
+    assert 0 < len(pair_positions) < len(order)
+    # Appended last, and a short budget would have fallen on all of them.
+    assert pair_positions != list(range(len(order) - len(pair_positions), len(order)))
+    assert report.selection["unscored"] == report.selection["train"]["discarded"].get("unscored", 0)
+    assert 0.0 <= report.selection["unscored_fraction"] <= 1.0
+
+
+def test_unused_stage_tokens_go_to_training(tokenizer, world):
+    cfg = small_config(replace(get_arm("S_oracleq"), selection=False, write_gate=False), night_tokens=40_000)
+    cfg.train = TrainConfig(lr=1e-3, hard_batch=2, kl_batch=2, anchor_batch=2)  # max_steps None.
+    report = run_night(fresh_gpt2_state(cfg, world, tokenizer), cfg)
+    assert report.ledger["unspent"] == cfg.budget.night_tokens - report.ledger["spent"]
+    assert report.ledger["unspent"] < 0.25 * cfg.budget.night_tokens
+
+
+def test_b4_spends_its_whole_teacher_allocation_on_fresh_samples(tokenizer, world):
+    cfg = small_config(get_arm("B4_replay_kl"), night_tokens=20_000)
+    cfg.teacher.self_samples = None
+    state = fresh_gpt2_state(cfg, world, tokenizer)
+    first = run_night(state, cfg)
+    assert first.teacher["anchor_sequences"] > 4 and not first.teacher["exhausted"]
+    spent = first.ledger["forward"]["teacher"] + first.ledger["backward"]["teacher"]
+    assert spent > 0.9 * (20_000 * cfg.budget.fractions["teacher"] / (cfg.budget.fractions["teacher"] + cfg.budget.fractions["train"]))
+
+
+def test_self_sampling_without_a_budget_needs_a_count(tokenizer):
+    handle = ModelHandle(DeltaModel(tiny_gpt2(tokenizer.vocab_size), rank=2), tokenizer, "cpu")
+    with pytest.raises(ValueError):
+        build_self_sampled_targets(handle, TeacherConfig(self_samples=None), torch.Generator())
+
+
+def test_b3_pairs_replays_real_concatenated_pairs_under_the_cap_with_no_model_or_signal(tokenizer, world):
+    cfg = small_config(get_arm("B3_pairs"))
+    cfg.queries.max_pairs = 1
+    state = fresh_gpt2_state(cfg, world, tokenizer)
+    report = run_night(state, cfg)
+    assert report.synthesis["pairs"]["chosen"] == 1
+    assert set(report.ledger["forward"]) == {"train"}
+    plain = fresh_gpt2_state(small_config(get_arm("B3_replay")), TinyWorld(), tokenizer)
+    run_night(plain, small_config(get_arm("B3_replay")))
+    arm = get_arm("B3_pairs")
+    with_pairs = hard_pool_examples(arm, state.store, state.handle, set(), [], 2, set())
+    without = hard_pool_examples(get_arm("B3_replay"), plain.store, plain.handle, set(), [], 2, set())
+    assert len(with_pairs) == len(without) + 1
+    a, b = world.episodes(0)
+    assert tokenizer.decode(with_pairs[-1].cont_ids) == f"{a.text}\n{b.text}"
+    assert with_pairs[-1].episode_ids == (a.id, b.id)
+
+
+def test_a_superseded_partner_leaves_pair_replay(tokenizer, world):
+    cfg = small_config(get_arm("B3_pairs"))
+    state = fresh_gpt2_state(cfg, world, tokenizer)
+    run_night(state, cfg)
+    count = len(hard_pool_examples(cfg.arm, state.store, state.handle, set(), [], 2, set()))
+    a, b = world.episodes(0)
+    state.store.add(Episode("update", "New fact.", 1, supersedes=[b.id]))
+    # One pair, b's three forms, gone; the update's single form, added.
+    assert len(hard_pool_examples(cfg.arm, state.store, state.handle, set(), [], 2, set())) == count - 1 - 3 + 1
+
+
+def test_write_gate_defers_rather_than_drops_and_reports_the_rate(tokenizer, world, monkeypatch):
+    import llmsleep.phases.night as night_module
+
+    original = night_module.thresholds_from_null
+    monkeypatch.setattr(
+        night_module,
+        "thresholds_from_null",
+        lambda values, select_cfg: replace(original(values, select_cfg), gate=1e9),
+    )
+    cfg = small_config(get_arm("S_oracleq"))
+    state = fresh_gpt2_state(cfg, world, tokenizer)
+    report = run_night(state, cfg)
+    assert all(e.status == "deferred" for e in state.store.all_real()) and len(state.store) == 2
+    assert report.signals["gate_rate"] == 1.0
+    assert report.episodes_trained > 0  # Still replayed.
+    assert report.synthesis["train_candidates"] == 0  # But no teacher targets tonight.
+    assert all(w["deferred"] for w in report.wake)
+
+
+# ---- mutations 1, 3 and 4 of the review ------------------------------------------------------------
+
+
+def test_stored_targets_are_the_teachers_logits_under_its_context(tokenizer):
+    """Mutation 1: `handle.format(spec.query, None)` for the teacher passes shape tests and teaches nothing."""
+    handle = ModelHandle(DeltaModel(tiny_gpt2(tokenizer.vocab_size), rank=2), tokenizer, "cpu", batch_size=4)
+    cfg = TeacherConfig(samples=1, max_new_tokens=3, top_k=4)
+    spec = TargetSpec("Who keeps kites?", "Mira keeps nine kites.", "committed", "integrate")
+    target = build_targets(handle, [spec], cfg, torch.Generator().manual_seed(1))[0][0]
+
+    def log_probs(context):
+        prompt = handle.encode_prompt(handle.format(spec.query, context))
+        with handle.banks("committed"):
+            _, logits = next(handle.iter_answer_logits([prompt], [target.cont_ids]))
+        return torch.log_softmax(logits, dim=-1)
+
+    with_context = log_probs(spec.teacher_context)
+    assert torch.allclose(with_context.gather(-1, target.top_idx), target.top_logp, atol=1e-5)
+    assert not torch.allclose(log_probs(None).gather(-1, target.top_idx), target.top_logp, atol=1e-4)
+    assert target.prompt_ids == handle.encode_prompt(handle.format(spec.query, None))  # The student stays closed.
+
+
+def _names(text: str) -> set[str]:
+    return set(re.findall(r"Mira\d+", text))
+
+
+def test_selection_scores_each_query_with_its_own_context_on_the_sampling_side(tokenizer, world, monkeypatch):
+    """Mutation 3: `(query, distractor, context)` at the call site is the wrong KL, and night tests only count."""
+    import llmsleep.phases.night as night_module
+
+    seen: list = []
+    original = night_module.chd_safe
+
+    def recording(handle, items, *args, **kwargs):
+        seen.extend(items)
+        return original(handle, items, *args, **kwargs)
+
+    monkeypatch.setattr(night_module, "chd_safe", recording)
+    cfg = small_config(get_arm("S_oracleq"))
+    run_night(fresh_gpt2_state(cfg, world, tokenizer), cfg)
+    named = [item for item in seen if _names(item[0])]  # A model-generated pool query might name nobody.
+    assert named
+    for query, context, distractor in named:
+        assert _names(query) & _names(context), (query, context)
+        assert not _names(query) & _names(distractor), (query, distractor)
+
+
+def test_audit_measures_each_item_with_its_own_context_on_the_sampling_side(tokenizer, world, monkeypatch):
+    """Mutation 3, at `commit.py`: the positional call to `chd`."""
+    import llmsleep.phases.commit as commit_module
+
+    calls: list = []
+    original = commit_module.chd
+
+    def recording(handle, queries, ctx_e, ctx_d, *args, **kwargs):
+        calls.append((queries[0], ctx_e[0], ctx_d[0]))
+        return original(handle, queries, ctx_e, ctx_d, *args, **kwargs)
+
+    monkeypatch.setattr(commit_module, "chd", recording)
+    items = [AuditItem("Who is Mira7?", "Mira7 keeps kites.", "Tides rise.", ("e",))]
+    measure_gaps(ModelHandle(tiny_gpt2(tokenizer.vocab_size), tokenizer, "cpu"), items, 1, 0, 2, 2)
+    assert calls == [("Who is Mira7?", "Mira7 keeps kites.", "Tides rise.")]
+
+
+def test_the_student_trains_with_committed_and_fresh_active(tokenizer):
+    """Mutation 4: `delta.banks("fresh")` would learn while ignoring earlier nights, then merge."""
+    delta = DeltaModel(tiny_gpt2(tokenizer.vocab_size), rank=2)
+    handle = ModelHandle(delta, tokenizer, "cpu", batch_size=4)
+    _set_nonzero_fresh(delta, magnitude=0.1)
+    delta.merge_fresh_into_committed()
+    seen: list = []
+    original = handle.forward_train
+
+    def recording(batch):
+        seen.append(delta.active)
+        return original(batch)
+
+    handle.forward_train = recording
+    hard = hard_examples(handle, [Episode("e", "Mira keeps kites.", 0)])
+    train_loop(handle, hard, [], [], TrainConfig(hard_batch=1), torch.Generator().manual_seed(1), max_steps=2)
+    assert seen == [(COMMITTED, "fresh")] * 2
 
 
 def test_bm25_arm_takes_teacher_context_from_retrieval(tokenizer, world):
@@ -337,7 +718,8 @@ def test_selection_arm_reports_all_candidates(tokenizer, world):
     report = run_night(state, cfg)
     train = report.selection["train"]
     assert report.signals["threshold_source"] in {"quantile", "extremes", "none"}
-    assert train["integrate"] + train["anchor"] + sum(train["discarded"].values()) == report.synthesis["train_candidates"]
+    total = report.synthesis["train_candidates"] + report.synthesis["anchor_pool_train"]
+    assert train["integrate"] + train["anchor"] + sum(train["discarded"].values()) == total
     assert report.wake and all("reason" in w for w in report.wake)
 
 
@@ -494,6 +876,9 @@ class _EchoGen:
         self.calls = 0
         self.fail_after = fail_after
 
+    def usable_pair(self, a, b) -> bool:
+        return True
+
     def generate(self, episodes, generator):
         if self.fail_after is not None and self.calls >= self.fail_after:
             raise LedgerExhausted("synthesis", 1, 0)
@@ -507,11 +892,47 @@ def test_pair_choice_prefers_links_across_nights():
     assert not exhausted and len(candidates) == 3
     for candidate in candidates:  # Eight cross-night pairs compete for three places; n0+n1 must not get one.
         assert sum(episode_id.startswith("o") for episode_id in candidate.episode_ids) == 1
-    assert gen.stats == {"available": 9, "cross_night_available": 8, "chosen": 3, "cross_night_chosen": 3}
+    assert gen.stats == {
+        "available": 9,
+        "chains_available": 0,
+        "cross_night_available": 8,
+        "chosen": 3,
+        "chains_chosen": 0,
+        "cross_night_chosen": 3,
+    }
     # Old episodes pair only through a new one, and same-night pairs fill the places that remain.
     gen = PairQueryGen(_EchoGen(), max_pairs=9)
     candidates, _ = gen.generate(_pair_store(4, 2), {"n0", "n1"}, torch.Generator().manual_seed(1))
     assert len(candidates) == 9 and candidates[-1].episode_ids == ("n0", "n1")
+
+
+def test_chains_come_first_in_the_pair_budget_and_are_reported():
+    store = EpisodicStore()
+    # Hub is the value of a and the subject of b: a chain. c and d merely share a subject with b or a value with a.
+    store.add(Episode("a", "A works at Hub.", 0, entities=["A", "Hub"]))
+    store.add(Episode("b", "Hub is in Oslo.", 1, entities=["Hub", "Oslo"]))
+    store.add(Episode("c", "Hub makes kites.", 0, entities=["Hub"]))
+    store.add(Episode("d", "D works at Hub.", 1, entities=["D", "Hub"]))
+    assert is_chain(store.get("a"), store.get("b")) and is_chain(store.get("b"), store.get("a"))
+    assert not is_chain(store.get("a"), store.get("d"))  # Same value: no second hop.
+    assert not is_chain(store.get("b"), store.get("c"))  # Same subject.
+    pairs = store.pairs_sharing_entity()
+    chosen = choose_pairs(pairs, 1, torch.Generator().manual_seed(1))
+    assert is_chain(*chosen[0])
+    stats = pair_stats(pairs, chosen)
+    assert stats["chains_chosen"] == 1 and stats["available"] == len(pairs) > 1
+
+
+def test_oracle_pairs_are_filtered_before_the_cap():
+    class OnlyOne(TinyWorld):
+        def pair_template_queries(self, a, b):
+            return ["Two hops?"] if {a.id, b.id} == {"o3", "n0"} else []
+
+    world = OnlyOne()
+    gen = PairQueryGen(TemplateQueryGen(world, per_episode=4), max_pairs=1)
+    candidates, _ = gen.generate(_pair_store(4, 1), {"n0"}, torch.Generator().manual_seed(1))
+    assert [c.episode_ids for c in candidates] == [("n0", "o3")]  # No slot wasted on a pair with no query.
+    assert gen.stats["available"] == 1
 
 
 def test_pair_choice_samples_rather_than_truncates():
@@ -731,16 +1152,18 @@ def _wake_handle(tokenizer):
     return ModelHandle(tiny_gpt2(tokenizer.vocab_size), tokenizer, "cpu", batch_size=4)
 
 
-def test_write_gate_stores_or_drops_by_threshold(tokenizer):
+def test_write_gate_defers_or_keeps_active_by_threshold(tokenizer):
     handle = _wake_handle(tokenizer)
     args = (2, 2, torch.Generator().manual_seed(1))
     episode = Episode("e", "Mira keeps kites.", 0)
     probes = [("Who?", "Tides rise at noon daily.")]
     store = EpisodicStore()
-    assert not observe(handle, store, episode, probes, 1e9, *args).stored  # Anything is below this.
-    assert "e" not in store
+    result = observe(handle, store, episode, probes, 1e9, *args)  # Anything is below this.
+    assert result.deferred and result.stored and "e" in store
+    assert store.get("e").status == "deferred" and "e" in [x.id for x in store.replayable()]
+    store = EpisodicStore()
     result = observe(handle, store, episode, probes, -1e9, *args)
-    assert result.stored and result.reason == "novel" and "e" in store
+    assert not result.deferred and result.reason == "novel" and store.get("e").status == "active"
 
 
 def test_write_gate_fails_open_and_bypasses(tokenizer):
@@ -754,7 +1177,7 @@ def test_write_gate_fails_open_and_bypasses(tokenizer):
     assert observe(handle, EpisodicStore(), superseding, probes, 1e9, *args).reason == "supersession"
 
 
-def test_write_gate_with_no_budget_stores_rather_than_drops(tokenizer):
+def test_write_gate_with_no_budget_keeps_the_episode_active(tokenizer):
     ledger = ComputeLedger()
     ledger.begin_night(0, {"signals": 1.0})
     handle = ModelHandle(tiny_gpt2(tokenizer.vocab_size), tokenizer, "cpu", ledger)

@@ -155,17 +155,24 @@ def _mark_terms(tokens: list[str], terms: Iterable[tuple[tuple[str, ...], str]])
 
 
 def score_answer(
-    generated: str, gold: Sequence[str], stale: Sequence[str] = (), vocabulary: Sequence[str] = ()
+    generated: str,
+    gold: Sequence[str],
+    stale: Sequence[str] = (),
+    vocabulary: Sequence[str] = (),
+    query: str = "",
 ) -> Scored:
     """Score the first answer in `generated`. `vocabulary` holds all same-type answers, gold among them or not.
 
-    A term in both gold and stale counts as gold: the value did not change for this query.
+    A term in both gold and stale counts as gold: the value did not change for this query. A vocabulary term
+    the query itself names is not a competitor: "The person known as Bobo is Dara Quilmont" repeats the
+    question's own term, and that is no wrong entity.
     """
     tokens = normalize_tokens(first_answer(generated))
+    query_tokens = normalize_tokens(query)
     labels: dict[tuple[str, ...], str] = {}
     for form in vocabulary:
         key = tuple(normalize_tokens(form))
-        if key:
+        if key and not contains_term(query_tokens, key):
             labels[key] = "other"
     for form in stale:
         key = tuple(normalize_tokens(form))

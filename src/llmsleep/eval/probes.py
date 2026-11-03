@@ -7,7 +7,7 @@ acquisition with supersession: an updated fact moves to the `supersede` kind, wi
 from __future__ import annotations
 
 import hashlib
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import TYPE_CHECKING, Optional, Sequence
 
 from ..config import derive_seed
@@ -27,6 +27,7 @@ KINDS = (
     "entrench_fact",
     "entrench_control",
 )
+ACCURACY_KINDS = ("direct", "paraphrase", "reverse", "alias", "two_hop", "supersede", "preservation")
 # Attributes with a look-alike probe, by look-alike kind.
 LOOKALIKE_ATTRS = {
     "person": ("employer", "hometown", "instrument", "birth_year", "invention"),
@@ -53,6 +54,7 @@ class Probe:
     neighbour: tuple[str, ...] = ()  # False recall: the value of the taught entity this one resembles.
     same_night: Optional[bool] = None  # Two-hop: whether both facts arrived on one night.
     ripple: bool = False  # Two-hop built on a superseded first link.
+    permuted: tuple[str, ...] = ()  # Gold of a different fact of the same type: the chance control (A1.3).
 
     def active(self, night: int) -> bool:
         return self.valid_from <= night and (self.valid_to is None or night < self.valid_to)
@@ -90,7 +92,56 @@ def build_probes(world: "SyntheticWorld", templates: dict) -> tuple[Probe, ...]:
     ids = [p.id for p in out]
     if len(ids) != len(set(ids)):
         raise AssertionError("probe ids are not unique")
+    return _attach_permuted(world, out)
+
+
+def _attach_permuted(world: "SyntheticWorld", probes: list[Probe]) -> tuple[Probe, ...]:
+    """Give each answerable probe the gold of another probe with the same vocabulary, disjoint from its own.
+
+    Drawn from other probes' gold, not uniformly from the vocabulary, so a control inherits the real marginal
+    of answers. An answer that only learned the type scores the same on gold and on this, so lift is zero.
+    """
+    from ..worlds.names import SeededRng  # Local: `worlds` imports this module at load time.
+
+    rng = SeededRng(derive_seed(world.seed, -1, "world:permuted"))
+    pools: dict[str, list[tuple[str, ...]]] = {}
+    for probe in probes:
+        if probe.gold and probe.kind in ACCURACY_KINDS and probe.gold not in pools.setdefault(probe.vocab, []):
+            pools[probe.vocab].append(probe.gold)
+    out = []
+    for probe in probes:
+        if not probe.gold or probe.kind not in ACCURACY_KINDS:
+            out.append(probe)
+            continue
+        taken = set(probe.gold) | set(probe.stale)
+        options = [gold for gold in pools[probe.vocab] if not taken & set(gold)]
+        out.append(replace(probe, permuted=rng.choice(options)) if options else probe)
     return tuple(out)
+
+
+def stratified_sample(
+    probes: Sequence[Probe], size: Optional[int], seed: int, purpose: str = "stratified"
+) -> list[Probe]:
+    """A seeded sample with attributes as equally represented as they can be. Order is seeded too.
+
+    `probes[:n]` would take the sorted keys' regions and org facts first (review H4).
+    """
+    from ..worlds.names import SeededRng  # Local: `worlds` imports this module at load time.
+
+    rng = SeededRng(derive_seed(seed, -1, f"sample:{purpose}"))
+    groups: dict[str, list[Probe]] = {}
+    for probe in probes:
+        groups.setdefault(probe.vocab, []).append(probe)
+    queues = [rng.shuffled(groups[vocab]) for vocab in sorted(groups)]
+    chosen: list[Probe] = []
+    while queues and (size is None or len(chosen) < size):
+        for queue in list(queues):
+            if size is not None and len(chosen) >= size:
+                break
+            chosen.append(queue.pop())
+            if not queue:
+                queues.remove(queue)
+    return rng.shuffled(chosen)
 
 
 def _direct_family(world: "SyntheticWorld", templates: dict) -> list[Probe]:

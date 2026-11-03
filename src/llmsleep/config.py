@@ -43,6 +43,7 @@ class ModelConfig:
     fp16: bool = False  # Autocast on CUDA only; factors stay float32.
     prompt_template: str = "Context: {context}\nQuestion: {query}\nAnswer:"
     empty_context: str = "(none)"
+    chat: bool = False  # Instruct models: wrap prompts in the tokenizer's chat template. Base: raw completion.
 
 
 @dataclass
@@ -66,6 +67,9 @@ class QueryConfig:
     temperature: float = 0.8
     instruction: str = "Write questions, one per line, that the text above answers."
     max_pairs: int = 16
+    anchor_older_episodes: int = 8  # Older episodes per night to generate fresh anchor queries over.
+    anchor_distractor_episodes: int = 8  # Likewise for distractor-pool episodes.
+    anchor_pool_max: int = 128  # Pool size scored per night, as a uniform sample.
 
 
 @dataclass
@@ -73,16 +77,18 @@ class SelectConfig:
     integrate_null_q: float = 0.90  # Integrate: CHD above this quantile of the null.
     anchor_null_q: float = 0.50  # Anchor: CHD at or below this quantile, and lexically near.
     gate_null_q: float = 0.50  # Write gate and retirement: at or below this quantile means no dependence.
-    n_null: int = 32
+    n_null: int = 128
+    n_null_pair: int = 64  # Pairs have their own null, over two-episode contexts.
     min_null: int = 8  # Below this the quantiles are not trusted; the null's extremes are used.
-    lexical_min: float = 0.3
+    null_share: float = 0.2  # Of the signals stage at most this goes on nulls, and at most gate_share on the gate.
+    gate_share: float = 0.1  # The rest is reserved for scoring candidates.
+    lexical_min: float = 0.3  # How much a query must overlap an older episode's text to count as touching it.
     distractor_length_tol: float = 0.5
     hard_boost: int = 2  # Extra sampling weight in the "selected" pool for episodes with integrate queries.
-    # With selection off, draw counts per night: {str(night): report.selection of the paired CHD arm, same seed}.
-    # Only "train" and "heldout", each with "integrate" and "anchor", are read. A night that is absent falls
-    # back to the fractions below, and the report says so through selection["count_source"].
+    # With selection off, anchor counts per night: {str(night): report.selection of the paired CHD arm, same seed}.
+    # Only "train" and "heldout", each with "anchor", are read. A night that is absent falls back to the fraction
+    # below, of the anchor pool, and the report says so through selection["count_source"].
     matched_selection: dict[str, dict] | None = None
-    uniform_integrate_frac: float = 0.5
     uniform_anchor_frac: float = 0.25
 
 
@@ -91,7 +97,7 @@ class TeacherConfig:
     samples: int = 2
     max_new_tokens: int = 24
     top_k: int = 64
-    self_samples: int = 64  # B4: sequences sampled from germline.
+    self_samples: int | None = None  # B4: sequences from germline. None: draw until the teacher stage is spent.
     self_max_new_tokens: int = 32
 
 
@@ -121,10 +127,15 @@ class CompactConfig:
 @dataclass
 class CommitConfig:
     heldout_frac: float = 0.2
-    max_anchor_drift: float = 0.1  # Nats per answer token, over held-out anchors.
-    min_gap_drop: float = 0.0  # Mean gap must fall by more than this.
+    max_anchor_drift: float = 0.1  # Largest increase over a night, nats per answer token, on held-out anchors.
+    min_gap_drop: float = 0.0  # Mean gap must fall by this much more than on the null-control set.
     retire_nights: int = 3
     audit_max_items: int = 64
+    old_item_share: float = 0.5  # Of audit_max_items reserved for earlier nights' items, or retirement never runs.
+    audit_max_anchors: int = 16
+    control_items: int = 16
+    audit_pre_share: float = 0.55  # Of the audit stage for before-training work. The rest waits for the after pass.
+    after_margin: float = 1.25  # Reserve this times the before pass's cost; the surplus goes to training.
 
 
 @dataclass

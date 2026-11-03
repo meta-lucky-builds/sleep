@@ -31,7 +31,7 @@ from ..config import TeacherConfig, TrainConfig
 from ..delta import BankSpec
 from ..handle import ModelHandle, build_batch, gather_answer_logits, gather_answer_targets
 from ..ledger import LedgerExhausted
-from ..memory import Episode
+from ..memory import Episode, format_context
 from ..signals import SignalCache, get_samples
 from .queries import normalize_query
 
@@ -166,14 +166,26 @@ def build_targets(
 def build_self_sampled_targets(
     handle: ModelHandle, cfg: TeacherConfig, generator: torch.Generator
 ) -> tuple[list[TokenTargets], bool]:
-    """B4: text sampled from germline, with germline's own distributions as targets, on all its tokens."""
+    """B4: text sampled from germline, with germline's own distributions as targets, on all its tokens.
+
+    With `self_samples=None`, draws fresh sequences until the stage's tokens are spent (A1.11): a small fixed set
+    could be matched on its own, without protecting generic behaviour. That end is expected, so it is not reported
+    as exhaustion; running out before an explicit count is.
+    """
+    if cfg.self_samples is None and handle.ledger.remaining() is None:
+        raise ValueError("an unmetered ledger needs an explicit self_samples")
     start = handle.start_ids()
+    targets: list[TokenTargets] = []
     try:
         with handle.banks("germline"):
-            samples = handle.sample([start], cfg.self_samples, cfg.self_max_new_tokens, 1.0, generator)[0]
-            targets = _targets_from_samples(handle, start, start, [s.token_ids for s in samples], cfg.top_k, "self")
+            while cfg.self_samples is None or len(targets) < cfg.self_samples:
+                n = handle.batch_size if cfg.self_samples is None else min(handle.batch_size, cfg.self_samples - len(targets))
+                samples = handle.sample([start], n, cfg.self_max_new_tokens, 1.0, generator)[0]
+                targets.extend(
+                    _targets_from_samples(handle, start, start, [s.token_ids for s in samples], cfg.top_k, "self")
+                )
     except LedgerExhausted:
-        return [], True
+        return targets, cfg.self_samples is not None
     return targets, False
 
 
@@ -186,7 +198,7 @@ def hard_examples(
     the audit holds out.
     """
     start = handle.start_ids()
-    eos = [handle.eos_id] if handle.eos_id is not None else []
+    eos = handle.text_end_ids()
     out: list[HardExample] = []
     for episode in episodes:
         for text in [episode.text] + list(episode.meta.get("statements", [])):
@@ -198,6 +210,15 @@ def hard_examples(
                 prompt = handle.encode_prompt(handle.format(query, None))
                 out.append(HardExample(prompt, handle.encode_answer(answer), (episode.id,)))
     return out
+
+
+def pair_examples(handle: ModelHandle, pairs: Sequence[tuple[Episode, Episode]]) -> list[HardExample]:
+    """Two real episodes concatenated, as plain text: co-occurrence with no model and no signal (A1.1)."""
+    start = handle.start_ids()
+    eos = handle.text_end_ids()
+    return [
+        HardExample(start, handle.encode_continuation(format_context([a, b])) + eos, (a.id, b.id)) for a, b in pairs
+    ]
 
 
 class _Cycler:
@@ -217,11 +238,6 @@ class _Cycler:
                 self.order = torch.randperm(len(self.items), generator=self.generator).tolist()
             out.append(self.items[self.order.pop()])
         return out
-
-    def mean_tokens(self) -> float:
-        if not self.items:
-            return 0.0
-        return sum(len(x.prompt_ids) + len(x.cont_ids) for x in self.items) / len(self.items)
 
 
 @dataclass
@@ -288,6 +304,18 @@ def _stored_kl(log_probs: Tensor, targets: Sequence[TokenTargets]) -> Tensor:
     return reduced_kl(log_probs, top_idx, top_logp, res_logp).mean()
 
 
+def estimate_step_tokens(
+    hard: Sequence[HardExample], integrate: Sequence[TokenTargets], anchor: Sequence[TokenTargets], cfg: TrainConfig
+) -> float:
+    """Expected ledger tokens per optimizer step: forward and backward, over all micro-batches."""
+
+    def mean_tokens(items: Sequence) -> float:
+        return sum(len(x.prompt_ids) + len(x.cont_ids) for x in items) / len(items) if items else 0.0
+
+    micro = cfg.hard_batch * mean_tokens(hard) + cfg.kl_batch * mean_tokens(integrate) + cfg.anchor_batch * mean_tokens(anchor)
+    return 2.0 * micro * cfg.accum_steps
+
+
 def train_loop(
     handle: ModelHandle,
     hard: Sequence[HardExample],
@@ -307,12 +335,8 @@ def train_loop(
     delta.assert_only_fresh_trainable()
     result = TrainResult()
     hard_pool, kl_pool, anchor_pool = _Cycler(hard, generator), _Cycler(integrate, generator), _Cycler(anchor, generator)
-    micro_tokens = (
-        cfg.hard_batch * hard_pool.mean_tokens()
-        + cfg.kl_batch * kl_pool.mean_tokens()
-        + cfg.anchor_batch * anchor_pool.mean_tokens()
-    )
-    if micro_tokens == 0:
+    step_tokens = estimate_step_tokens(hard, integrate, anchor, cfg)
+    if step_tokens == 0:
         return result
     limit = max_steps if max_steps is not None else cfg.max_steps
     remaining = handle.ledger.remaining()
@@ -320,13 +344,13 @@ def train_loop(
         raise ValueError("an unmetered ledger needs max_steps")
     planned = limit if limit is not None else 0
     if remaining is not None:
-        affordable = max(1, int(remaining / (2 * micro_tokens * cfg.accum_steps)))  # 2: forward and backward.
+        affordable = max(1, int(remaining / step_tokens))
         planned = min(planned, affordable) if limit is not None else affordable
     result.planned_steps = planned
 
     parameters = delta.fresh_parameters()
     optimizer = torch.optim.AdamW(parameters, lr=cfg.lr, weight_decay=cfg.weight_decay)
-    scaler = torch.amp.GradScaler(handle.device.type) if handle.fp16 else None
+    scaler = handle.grad_scaler()
     with delta.banks("night"), handle.training_mode(cfg.gradient_checkpointing):
         try:
             for step in range(planned):
@@ -355,7 +379,10 @@ def train_loop(
                     continue
                 if scaler is not None:
                     scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(parameters, cfg.max_grad_norm)
+                norm = torch.nn.utils.clip_grad_norm_(parameters, cfg.max_grad_norm)
+                if scaler is None and not torch.isfinite(norm):  # With a scaler, its own check handles this.
+                    result.nonfinite_steps += 1
+                    continue
                 if scaler is not None:
                     scale_before = scaler.get_scale()
                     scaler.step(optimizer)

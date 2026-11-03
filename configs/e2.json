@@ -3,15 +3,15 @@
   "seed_role": "confirmatory",
   "model_ids": ["Qwen/Qwen2.5-0.5B"],
   "world_seeds": [1001, 1002, 1003, 1004, 1005],
-  "arms": ["B0_frozen", "B1_rag", "B2_seq", "B3_replay", "B4_replay_kl", "S_full", "S_oracleq", "S_noselect", "S_nokl", "S_chain", "S_nocompact", "S_nopair", "S_nocommit", "S_bm25"],
+  "arms": ["B0_frozen", "B1_rag", "B2_seq", "B3_replay", "B3_pairs", "B4_replay_kl", "S_full", "S_oracleq", "S_noselect", "S_nokl", "S_chain", "S_nocompact", "S_nopair", "S_nocommit", "S_bm25"],
   "matched_arms": {"S_noselect": "S_full"},
-  "world": {"n_persons": 100, "n_orgs": 25, "n_cities": 16, "n_regions": 5, "nights": 1, "supersession_rate": 0.0, "n_distractors": 100, "n_control_persons": 30, "n_entrench": 150},
+  "world": {"n_persons": 100, "n_orgs": 25, "n_cities": 16, "n_regions": 12, "nights": 1, "supersession_rate": 0.0, "n_distractors": 100, "n_control_persons": 30, "n_entrench": 150},
   "night": {
     "model": {"rank": 32, "alpha": 32.0, "batch_size": 16, "fp16": true},
     "budget": {"night_tokens": 4000000},
     "signals": {"k": 4, "max_new_tokens": 16, "chunk": 4},
     "queries": {"per_episode": 3, "model_samples": 2, "model_max_new_tokens": 64, "max_pairs": 128},
-    "teacher": {"samples": 2, "max_new_tokens": 16, "top_k": 64, "self_samples": 64, "self_max_new_tokens": 32},
+    "teacher": {"samples": 2, "max_new_tokens": 16, "top_k": 64, "self_samples": null, "self_max_new_tokens": 32},
     "train": {"lr": 0.0003, "hard_batch": 8, "kl_batch": 4, "anchor_batch": 4, "gradient_checkpointing": true, "max_steps": null},
     "compact": {"threshold": 0.01, "max_rank": 256, "repair_steps": 20}
   },

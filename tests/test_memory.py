@@ -53,6 +53,14 @@ def test_retire_leaves_active_but_stays_in_archive():
     assert [e.id for e in store.all_real()] == ["a", "b", "c"]
 
 
+def test_deferred_episodes_leave_active_retrieval_but_are_still_replayed():
+    store = _store()
+    store.defer("c")
+    assert "c" not in [e.id for e in store.active()]
+    assert "c" in store and "c" in [e.id for e in store.replayable()]
+    assert "c" not in [e.id for e in BM25Retriever().retrieve("who paints foxes in Lima", store, k=3)]
+
+
 def test_neighbours_and_pairs_sharing_entity():
     store = _store()
     assert [e.id for e in store.neighbours("oslo")] == ["a", "b"]

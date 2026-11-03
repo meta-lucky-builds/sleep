@@ -71,6 +71,10 @@ class EpisodicStore:
         """Leave active retrieval; remain in the archive."""
         self._episodes[episode_id].status = "retired"
 
+    def defer(self, episode_id: str) -> None:
+        """The write gate's outcome: no active retrieval, but stored and still replayed (A1.12)."""
+        self._episodes[episode_id].status = "deferred"
+
     def active(self) -> list[Episode]:
         return [e for e in self._episodes.values() if e.status == "active"]
 

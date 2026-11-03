@@ -39,6 +39,7 @@ class ComputeLedger:
         self._fractions: dict[str, float] = {}
         self._closed: set[str] = set()
         self._stage: Optional[str] = None
+        self._limit: Optional[int] = None
         self._exempt_depth = 0
 
     def begin_night(self, allowance: int, fractions: Mapping[str, float]) -> None:
@@ -81,6 +82,28 @@ class ComputeLedger:
             yield
         finally:
             self._exempt_depth -= 1
+
+    @contextmanager
+    def limit(self, tokens: int) -> Iterator[None]:
+        """At most `tokens` more in the current stage inside the block, so one step cannot eat the stage's rest."""
+        previous = self._limit
+        stage = self._stage
+        if stage is None:
+            raise RuntimeError("limit needs a current stage")
+        self._limit = self.spent(stage) + max(0, int(tokens))
+        try:
+            yield
+        finally:
+            self._limit = previous
+
+    def transfer(self, source: str, target: str, tokens: int) -> None:
+        """Move unspent allowance between open stages. The night's total does not change."""
+        if tokens < 0 or tokens > self.caps[source] - self.spent(source):
+            raise ValueError(f"cannot move {tokens} tokens out of stage {source!r}")
+        if source in self._closed or target in self._closed:
+            raise ValueError("cannot move tokens to or from a closed stage")
+        self.caps[source] -= tokens
+        self.caps[target] += tokens
 
     def restore_exempt(self, forward: int, backward: int) -> None:
         """Set the exempt counters: from a checkpoint, or back to before per-process setup work."""
@@ -125,6 +148,8 @@ class ComputeLedger:
             raise RuntimeError("metered charge outside a stage; use ledger.stage(...) or ledger.exempt()")
         requested = forward + backward
         left = self.caps[stage] - self.spent(stage)
+        if self._limit is not None:
+            left = min(left, self._limit - self.spent(stage))
         if requested > left:
             if stage not in self.exhausted:
                 self.exhausted.append(stage)
@@ -152,6 +177,7 @@ class ComputeLedger:
         return {
             "allowance": self.allowance,
             "spent": self.spent(),
+            "unspent": (self.allowance - self.spent()) if self.allowance is not None else None,
             "caps": dict(self.caps),
             "forward": dict(self.forward),
             "backward": dict(self.backward),

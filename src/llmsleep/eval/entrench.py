@@ -40,11 +40,13 @@ def evaluate_entrenchment(
     )
     follow_fact, follow_control, kept_old = Tally(), Tally(), Tally()
     for probe in facts:
-        scored = score_answer(answers[(probe.query, probe.context)][0], probe.gold, probe.stale, world.vocabulary(probe.vocab))
+        text = answers[(probe.query, probe.context)][0]
+        scored = score_answer(text, probe.gold, probe.stale, world.vocabulary(probe.vocab), probe.query)
         follow_fact.add(probe.cluster, float(scored.correct))
         kept_old.add(probe.cluster, float(scored.stale))
     for probe in controls:
-        scored = score_answer(answers[(probe.query, probe.context)][0], probe.gold, probe.stale, world.vocabulary(probe.vocab))
+        text = answers[(probe.query, probe.context)][0]
+        scored = score_answer(text, probe.gold, probe.stale, world.vocabulary(probe.vocab), probe.query)
         follow_control.add(probe.cluster, float(scored.correct))
     metrics = {
         "entrench_follow_fact": follow_fact.rate(),

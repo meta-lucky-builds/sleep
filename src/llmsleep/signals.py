@@ -3,10 +3,11 @@
     CHD(x; e, d) = KL( p(y|x,e) || p(y|x,d) ) ~= (1/K) sum_k [ log p(y_k|x,e) - log p(y_k|x,d) ],  y_k ~ p(.|x,e)
 
 Samples come from the e side at temperature 1, or the estimator is not this KL. Both log-probs cover the
-same tokens, with EOS scored on both sides when it was sampled.
+same tokens, with the stop token scored on both sides when it was sampled. Generation is in answer mode (A1.9): it
+stops at EOS or a token containing a newline, so the signal covers the answer and not what a raw model runs on into.
 
-Truncation: y is "the continuation up to and including EOS, or the first m tokens if EOS has not come by
-then". A sample without EOS is therefore a legitimate outcome, the event that those m tokens occurred, and
+Truncation: y is "the continuation up to and including the stop token, or the first m tokens if none has come by
+then". A sample without one is therefore a legitimate outcome, the event that those m tokens occurred, and
 its probability is the product of its token conditionals. The estimator is unbiased for the KL between the
 laws of this truncated y, a prefix KL. By data processing that is a lower bound on the KL of untruncated
 sequences, and it equals E[min(L, m)] * KL per token when tokens are iid with stopping length L.
@@ -78,7 +79,7 @@ def get_samples(
         hit = cache.get_samples(key, n)
         if hit is not None:
             return hit
-    samples = handle.sample([handle.format(query, context)], n, max_new_tokens, 1.0, generator)[0]
+    samples = handle.sample([handle.format(query, context)], n, max_new_tokens, 1.0, generator, answer_mode=True)[0]
     if cache is not None:
         cache.put_samples(key, samples)
     return samples
@@ -121,7 +122,7 @@ def chd(
                 need.append(i)
         if need:
             prompts = [handle.format(queries[i], ctx_e[i]) for i in need]
-            drawn = handle.sample(prompts, k, max_new_tokens, 1.0, generator)
+            drawn = handle.sample(prompts, k, max_new_tokens, 1.0, generator, answer_mode=True)
             for i, samples in zip(need, drawn):
                 samples_by_row[i] = samples
                 if cache is not None:
@@ -179,8 +180,12 @@ def chd_safe(
     generator: torch.Generator,
     cache: Optional[SignalCache] = None,
     chunk: int = 4,
+    per_token: bool = True,
 ) -> tuple[list[Optional[float]], bool]:
-    """CHD for (query, ctx_e, ctx_d) items in chunks. On exhaustion keeps what finished: (values, exhausted)."""
+    """CHD for (query, ctx_e, ctx_d) items in chunks. On exhaustion keeps what finished: (values, exhausted).
+
+    Per answer token by default: every decision rule compares sequences of different lengths.
+    """
     values: list[Optional[float]] = [None] * len(items)
     for start in range(0, len(items), chunk):
         part = items[start : start + chunk]
@@ -197,5 +202,5 @@ def chd_safe(
             )
         except LedgerExhausted:
             return values, True
-        values[start : start + len(part)] = result.values.tolist()
+        values[start : start + len(part)] = (result.per_token if per_token else result.values).tolist()
     return values, False

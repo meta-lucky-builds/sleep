@@ -80,11 +80,12 @@ class NameForge:
     So a near-name of an issued token (distance 1 or 2) can never be another issued token.
     """
 
-    def __init__(self, rng: SeededRng, min_distance: int = 3) -> None:
+    def __init__(self, rng: SeededRng, min_distance: int = 3, banned: Iterable[str] = ()) -> None:
         self.rng = rng
         self.min_distance = min_distance
         self.issued: list[str] = []  # Casefolded, in issue order.
-        self._all: dict[str, None] = {}  # Issued and reserved look-alikes: never handed out.
+        # Issued, reserved look-alikes, and words E0 found a model knows: never handed out.
+        self._all: dict[str, None] = {word.casefold(): None for word in banned}
 
     def _candidate(self, short: bool) -> str:
         r = self.rng

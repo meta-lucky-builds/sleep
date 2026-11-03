@@ -18,6 +18,7 @@ from llmsleep.handle import (
     continuation_logprobs,
     gather_answer_logits,
     gather_answer_targets,
+    is_instruct_model,
     positions_from_mask,
 )
 from llmsleep.ledger import ComputeLedger, LedgerExhausted
@@ -205,6 +206,85 @@ def test_eos_is_included_finished_is_set_and_truncation_is_marked():
     assert out.logprob == pytest.approx(0.0, abs=1e-3)
     short = handle.sample([[2]], 1, 1, 1.0, torch.Generator().manual_seed(0))[0][0]
     assert short.token_ids == [stop] and not short.finished
+
+
+def test_a_second_eos_really_stops_sampling():
+    tok = TinyTokenizer("abcdefgh")
+    table = _eos_table(tok.vocab_size, 3)
+    single = ModelHandle(BigramStub(table), tok, "cpu", batch_size=2)
+    assert single.sample([[2]], 1, 5, 1.0, torch.Generator().manual_seed(0))[0][0].token_ids == [3, EOS]
+    double = ModelHandle(BigramStub(table), tok, "cpu", batch_size=2, eos_ids=[EOS, 3])
+    out = double.sample([[2]], 1, 5, 1.0, torch.Generator().manual_seed(0))[0][0]
+    assert out.token_ids == [3] and out.finished
+
+
+def test_answer_mode_stops_at_a_token_containing_a_newline():
+    tok = TinyTokenizer("ab\n")
+    newline = 4
+    handle = ModelHandle(BigramStub(_eos_table(tok.vocab_size, newline)), tok, "cpu", batch_size=2)
+    plain = handle.sample([[2]], 1, 5, 1.0, torch.Generator().manual_seed(0))[0][0]
+    assert plain.token_ids == [newline, EOS]  # Without it, the newline is just another token.
+    answer = handle.sample([[2]], 1, 5, 1.0, torch.Generator().manual_seed(0), answer_mode=True)[0][0]
+    assert answer.token_ids == [newline] and answer.finished
+
+
+def test_answer_mode_scan_survives_a_model_vocabulary_larger_than_the_tokenizer():
+    tok = TinyTokenizer("ab\n")
+    table = torch.zeros(tok.vocab_size + 3, tok.vocab_size + 3)  # decode() raises IndexError past the tokenizer's end.
+    handle = ModelHandle(BigramStub(table), tok, "cpu", batch_size=2)
+    assert handle.sample([[2]], 1, 1, 0, torch.Generator(), answer_mode=True)[0][0].token_ids
+
+
+class _ChatTokenizer(TinyTokenizer):
+    def apply_chat_template(self, messages, tokenize, add_generation_prompt):
+        assert not tokenize and add_generation_prompt
+        return f"<U>{messages[0]['content']}<A>"
+
+    def convert_tokens_to_ids(self, token):
+        return 5 if token == "<|endoftext|>" else None
+
+
+def test_instruct_models_use_the_chat_template_and_a_clean_start():
+    tok = _ChatTokenizer()
+    table = _table(tok.vocab_size)
+    chat = ModelHandle(BigramStub(table), tok, "cpu", prompt_format=PromptFormat(chat=True))
+    assert chat.format("q", "c") == "<U>Context: c\nQuestion: q<A>"
+    assert chat.start_ids() == [5] and chat.text_end_ids() == [5]  # Not the end-of-turn token.
+    assert tok.decode(chat.encode_answer("Paris")) == "Paris"  # An assistant turn has no leading space.
+    assert chat.encode_answer("Paris")[-1] == EOS
+    base = ModelHandle(BigramStub(table), tok, "cpu")
+    assert base.format("q", "c") == "Context: c\nQuestion: q\nAnswer:"
+    assert base.start_ids() == [EOS] and base.text_end_ids() == [EOS]
+
+
+def test_instruct_models_are_told_apart_by_name():
+    assert is_instruct_model("Qwen/Qwen2.5-1.5B-Instruct") and not is_instruct_model("Qwen/Qwen2.5-1.5B")
+
+
+def test_fp16_weights_without_autocast_become_float32():
+    handle = ModelHandle(BigramStub(_table().half()), TinyTokenizer("abcdefgh"), "cpu")
+    assert handle.net.table.dtype == torch.float32
+    assert handle.grad_scaler() is None  # And there is no scaler off CUDA.
+
+
+@pytest.mark.parametrize("builder", [tiny_gpt2, tiny_qwen2])
+def test_left_padding_and_sampling_under_sdpa_attention(builder):
+    """Real models default to SDPA, which handles fully masked left-padded rows differently from eager."""
+    tok = TinyTokenizer()
+    handle = ModelHandle(builder(tok.vocab_size, attn="sdpa"), tok, "cpu", batch_size=4)
+    long_prompt, short_prompt = list(range(2, 12)), [3, 4]
+    alone = handle.sequence_logprob([short_prompt], [[5, 6]])
+    batch = build_batch([long_prompt, short_prompt], [[7, 8, 9], [5, 6]], handle.pad_id, "left")
+    with torch.no_grad():
+        logits = handle._forward(batch.input_ids, batch.attention_mask, batch.position_ids).logits
+    assert torch.isfinite(logits[batch.attention_mask.bool()]).all()
+    left = continuation_logprobs(logits, batch.input_ids, batch.answer_mask)
+    assert float(left[1]) == pytest.approx(float(alone[0]), abs=1e-4)
+    samples = handle.sample([long_prompt, short_prompt], 2, 4, 1.0, torch.Generator().manual_seed(1))
+    assert all(math.isfinite(s.logprob) for row in samples for s in row)
+    # Rows that finished are masked in later steps; a second draw with a stop on everything exercises that.
+    stopping = ModelHandle(builder(tok.vocab_size, attn="sdpa"), tok, "cpu", batch_size=4, eos_ids=range(2, 40))
+    assert stopping.sample([long_prompt, short_prompt], 2, 4, 1.0, torch.Generator().manual_seed(2))
 
 
 def test_sampling_charges_real_tokens_only_no_cache():
@@ -396,6 +476,37 @@ def test_ledger_unused_tokens_roll_forward_to_open_stages_only():
     ledger.close_stage("a")  # Idempotent.
     ledger.close_stage("b")
     assert ledger.caps == {"a": 10, "b": 0, "c": 90}
+
+
+def test_ledger_limit_reserves_the_rest_of_a_stage_and_nests():
+    ledger = ComputeLedger()
+    ledger.begin_night(100, {"signals": 1.0})
+    with ledger.stage("signals"):
+        with ledger.limit(10):
+            ledger.charge(forward=10)
+            with pytest.raises(LedgerExhausted):
+                ledger.charge(forward=1)
+        ledger.charge(forward=90)  # The limit ended with its block; the cap did not.
+        with ledger.limit(1000), pytest.raises(LedgerExhausted):
+            ledger.charge(forward=1)  # A limit never exceeds the cap.
+    with pytest.raises(RuntimeError):
+        with ledger.limit(1):
+            pass
+
+
+def test_ledger_transfer_conserves_the_total_and_refuses_what_is_gone():
+    ledger = ComputeLedger()
+    ledger.begin_night(100, {"train": 0.5, "audit": 0.5})
+    with ledger.stage("audit"):
+        ledger.charge(forward=40)
+    ledger.transfer("audit", "train", 10)
+    assert ledger.caps == {"train": 60, "audit": 40}
+    with pytest.raises(ValueError):
+        ledger.transfer("audit", "train", 1)  # 40 of 40 are spent.
+    ledger.close_stage("train")
+    with pytest.raises(ValueError):
+        ledger.transfer("audit", "train", 0)
+    assert ledger.summary()["unspent"] == 60
 
 
 def test_ledger_metered_charge_needs_a_stage_and_inactive_stages_raise():

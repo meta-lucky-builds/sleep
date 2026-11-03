@@ -3,14 +3,14 @@
   "seed_role": "dev",
   "model_ids": ["Qwen/Qwen2.5-0.5B"],
   "world_seeds": [7],
-  "arms": ["B0_frozen", "B3_replay", "B4_replay_kl", "S_full", "S_noselect"],
+  "arms": ["B0_frozen", "B3_replay", "B3_pairs", "B4_replay_kl", "S_full", "S_noselect"],
   "matched_arms": {"S_noselect": "S_full"},
-  "world": {"n_persons": 40, "n_orgs": 10, "n_cities": 8, "n_regions": 4, "nights": 3, "supersession_rate": 0.2, "n_distractors": 80, "n_control_persons": 10, "n_entrench": 40},
+  "world": {"n_persons": 40, "n_orgs": 10, "n_cities": 8, "n_regions": 6, "nights": 3, "supersession_rate": 0.2, "n_distractors": 80, "n_control_persons": 10, "n_entrench": 40},
   "night": {
     "model": {"rank": 32, "alpha": 32.0, "batch_size": 16, "fp16": true},
     "signals": {"k": 4, "max_new_tokens": 16, "chunk": 4},
     "queries": {"per_episode": 3, "model_samples": 2, "model_max_new_tokens": 64, "max_pairs": 64},
-    "teacher": {"samples": 2, "max_new_tokens": 16, "top_k": 64, "self_samples": 64, "self_max_new_tokens": 32},
+    "teacher": {"samples": 2, "max_new_tokens": 16, "top_k": 64, "self_samples": null, "self_max_new_tokens": 32},
     "train": {"hard_batch": 8, "kl_batch": 4, "anchor_batch": 4, "gradient_checkpointing": true, "max_steps": null},
     "compact": {"threshold": 0.01, "max_rank": 256, "repair_steps": 20}
   },

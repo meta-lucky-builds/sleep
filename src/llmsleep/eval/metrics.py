@@ -19,6 +19,17 @@ from .answers import has_artefact, is_abstention, is_specific, names_vocabulary,
 from .probes import Probe, select_probes
 
 IMPLIED_KINDS = ("reverse", "alias", "two_hop")
+# Probe kind -> reported metric. Each also gets `<metric>_permuted` (gold of another fact of the same type, so
+# what a model scores by knowing only the answer's type) and `<metric>_lift`. PREREG A1.3: margins apply to lift.
+METRIC_OF_KIND = {
+    "direct": "acq_direct",
+    "paraphrase": "acq_paraphrase",
+    "reverse": "acq_reverse",
+    "alias": "acq_alias",
+    "two_hop": "acq_twohop",
+    "supersede": "supersede",
+    "preservation": "preservation",
+}
 
 
 @dataclass
@@ -50,11 +61,17 @@ def generate_answers(
     max_new_tokens: int,
     temperature: float,
     generator: torch.Generator,
+    answer_mode: bool = False,
 ) -> dict[tuple[str, Optional[str]], tuple[str, int]]:
-    """{(query, context): (decoded text, token count)}. Duplicates cost one generation."""
+    """{(query, context): (decoded text, token count)}. Duplicates cost one generation.
+
+    Nightly evaluation stays out of answer mode, so `style_length` sees what the model really writes, and
+    scoring cuts to the first line anyway. E0 uses answer mode to save CPU time.
+    """
     unique = list(dict.fromkeys(requests))
     prompts = [handle.format(query, context) for query, context in unique]
-    samples = handle.sample(prompts, 1, max_new_tokens, temperature, generator)
+    extra = {"answer_mode": True} if answer_mode else {}
+    samples = handle.sample(prompts, 1, max_new_tokens, temperature, generator, **extra)
     return {
         request: (handle.decode(drawn[0].token_ids), len(drawn[0].token_ids))
         for request, drawn in zip(unique, samples)
@@ -128,60 +145,68 @@ def evaluate_probes(
         return tallies.setdefault(name, Tally())
 
     correct_by_episode: dict[str, bool] = {}
-    for kind in ("direct", "paraphrase", "reverse", "alias", "two_hop", "supersede", "preservation"):
+    age_hits: dict[int, list[int]] = {}
+    for kind, name in METRIC_OF_KIND.items():
         weight = 1.0 / len(selected[kind]) if selected[kind] else 0.0
         for probe in selected[kind]:
-            scored = score_answer(answer(probe)[0], probe.gold, probe.stale, world.vocabulary(probe.vocab))
-            tally(kind).add(probe.cluster, float(scored.correct))
+            text = answer(probe)[0]
+            vocabulary = world.vocabulary(probe.vocab)
+            scored = score_answer(text, probe.gold, probe.stale, vocabulary, probe.query)
+            correct = float(scored.correct)
+            control = float(score_answer(text, probe.permuted, (), vocabulary, probe.query).correct)
+            tally(name).add(probe.cluster, correct)
+            tally(f"{name}_permuted").add(probe.cluster, control)
+            tally(f"{name}_lift").add(probe.cluster, correct - control)
             if kind in IMPLIED_KINDS:
-                tally("acq_implied").add(probe.cluster, float(scored.correct), weight)
+                tally("acq_implied").add(probe.cluster, correct, weight)
+                tally("acq_implied_permuted").add(probe.cluster, control, weight)
+                tally("acq_implied_lift").add(probe.cluster, correct - control, weight)
             if kind in ("direct", "supersede"):
                 correct_by_episode[probe.episode_ids[0]] = scored.correct
+                bucket = age_hits.setdefault(night - probe.valid_from, [0, 0])
+                bucket[0] += int(scored.correct)
+                bucket[1] += 1
             if kind == "supersede":
                 tally("stale").add(probe.cluster, float(scored.stale))
             if kind == "two_hop":
-                tally("two_hop_same_night" if probe.same_night else "two_hop_cross_night").add(
-                    probe.cluster, float(scored.correct)
+                tally("acq_twohop_same_night" if probe.same_night else "acq_twohop_cross_night").add(
+                    probe.cluster, correct
                 )
+                # Reported apart, since the two chains have answer vocabularies of different sizes (review H5).
+                tally(f"acq_twohop_{probe.vocab}").add(probe.cluster, correct)
                 if probe.ripple:
-                    tally("two_hop_ripple").add(probe.cluster, float(scored.correct))
+                    tally("acq_twohop_ripple").add(probe.cluster, correct)
     for probe in selected["false_recall"]:
         text = answer(probe)[0]
         abstained = is_abstention(text)
         vocabulary = world.vocabulary(probe.vocab)
-        tally("false_recall").add(probe.cluster, float(names_vocabulary(text, vocabulary) and not abstained))
+        bleed = names_vocabulary(text, vocabulary) and not abstained
+        tally("taught_value_bleed").add(probe.cluster, float(bleed))
         tally("false_recall_any_specific").add(probe.cluster, float(is_specific(text)))
         tally("abstain").add(probe.cluster, float(abstained))
-        neighbour = score_answer(text, probe.neighbour, (), vocabulary).correct and not abstained
+        neighbour = score_answer(text, probe.neighbour, (), vocabulary, probe.query).correct and not abstained
         tally("false_recall_neighbour").add(probe.cluster, float(neighbour))
 
     style_probes = [p for kind in ("direct", "reverse", "alias", "two_hop") for p in selected[kind]]
     lengths = [answer(p)[1] for p in style_probes]
     artefacts = [has_artefact(answer(p)[0]) for p in style_probes]
 
-    metrics: dict[str, Any] = {
-        "acq_direct": tally("direct").rate(),
-        "acq_paraphrase": tally("paraphrase").rate(),
-        "acq_reverse": tally("reverse").rate(),
-        "acq_alias": tally("alias").rate(),
-        "acq_two_hop": tally("two_hop").rate(),
-        "acq_two_hop_same_night": tally("two_hop_same_night").rate(),
-        "acq_two_hop_cross_night": tally("two_hop_cross_night").rate(),
-        "two_hop_ripple": tally("two_hop_ripple").rate(),
-        "acq_implied": tally("acq_implied").rate(),
-        "supersede": tally("supersede").rate(),
-        "stale": tally("stale").rate(),
-        "preservation": tally("preservation").rate(),
-        "false_recall": tally("false_recall").rate(),
-        "false_recall_any_specific": tally("false_recall_any_specific").rate(),
-        "false_recall_neighbour": tally("false_recall_neighbour").rate(),
-        "abstain": tally("abstain").rate(),
-        "style_length": sum(lengths) / len(lengths) if lengths else None,
-        "style_artefact": sum(artefacts) / len(artefacts) if artefacts else None,
-        "counts": {kind: len(probes) for kind, probes in selected.items()},
-    }
+    metrics: dict[str, Any] = {name: t.rate() for name, t in tallies.items()}
+    always = ("acq_implied", "stale", "taught_value_bleed", "false_recall_any_specific", "false_recall_neighbour", "abstain")
+    for name in tuple(METRIC_OF_KIND.values()) + always:  # Present even with no probe tonight.
+        metrics.setdefault(name, None)
+    metrics.update(
+        {
+            "style_length": sum(lengths) / len(lengths) if lengths else None,
+            "style_artefact": sum(artefacts) / len(artefacts) if artefacts else None,
+            "counts": {kind: len(probes) for kind, probes in selected.items()},
+            # Nights since the fact was taught -> [correct, count]: M6, whether compaction decays old facts.
+            "acq_by_age": {str(age): age_hits[age] for age in sorted(age_hits)},
+        }
+    )
     metrics.update(_audit_metrics(store, correct_by_episode))
-    per_cluster = {name: t.clusters for name, t in tallies.items()}
+    # The control's own clusters are not stored: `_lift` already carries it, and results stay smaller.
+    per_cluster = {name: t.clusters for name, t in tallies.items() if not name.endswith("_permuted")}
     return metrics, per_cluster
 
 

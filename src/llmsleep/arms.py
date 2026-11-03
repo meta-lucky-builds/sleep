@@ -17,9 +17,12 @@ class ArmConfig:
     hard pool for episodes that have integrate queries. Its hard labels come from real episode statements
     and QA forms, never from a teacher's answers, so its integrate queries are not trained on directly.
 
-    S_noselect ablates CHD only. With `selection` off, integrate and anchor queries are drawn uniformly,
-    with anchors from the lexically near ones, at S_full's counts when `SelectConfig.matched_selection`
-    supplies them. The tokens S_full would spend on signals go to its training stage.
+    S_noselect ablates CHD only (A1.4). With `selection` off, teacher KL covers all usable generated queries, and
+    anchors are a uniform draw from the anchor pool, at S_full's count when `SelectConfig.matched_selection`
+    supplies it. The tokens S_full would spend on signals go to its training stage.
+
+    Anchors, in every arm that has them (A1.5), come from a pool naming nothing of tonight's episodes: queries
+    generated on earlier nights, plus fresh model-generated queries over older episodes and the distractor pool.
     """
 
     name: str
@@ -28,7 +31,8 @@ class ArmConfig:
     retriever: str = "none"  # Context source for teachers, and for open-book eval.
     query_source: str = "none"  # model: generated. template: world's oracle templates.
     pair_contexts: bool = False  # Also synthesise queries over pairs of episodes sharing an entity.
-    selection: bool = False  # CHD partition into integrate/anchor/discard. Off: a uniform draw, no CHD.
+    replay_pairs: bool = False  # Hard labels also on concatenated real pairs, under the same pair cap (A1.1).
+    selection: bool = False  # CHD partition into integrate/anchor/discard. Off: all integrate, anchors drawn.
     write_gate: bool = False  # Do not store episodes the model already knows, by CHD.
     teacher_kl: bool = False  # KL to the open-book teacher on integrate queries.
     anchors: str = "none"  # Target when an anchor query touches nothing consolidated.
@@ -55,6 +59,10 @@ class ArmConfig:
             raise ValueError("the audit needs synthesised held-out queries")
         if (self.selection or self.write_gate or self.teacher_kl) and self.query_source == "none":
             raise ValueError("selection, write gate and teacher need synthesised queries")
+        if self.replay_pairs and self.hard_pool == "none":
+            raise ValueError("pair replay needs a hard pool")
+        if self.anchors != "none" and self.query_source == "none":
+            raise ValueError("anchors need a query generator for their pool")
         if self.train and self.hard_pool == "none" and not self.teacher_kl:
             raise ValueError("a training arm needs a hard pool or a teacher")
 
@@ -82,6 +90,7 @@ ARMS: dict[str, ArmConfig] = {
     "B1_rag": ArmConfig(name="B1_rag", open_book_eval=True, retriever="oracle"),
     "B2_seq": ArmConfig(name="B2_seq", train=True, hard_pool="new"),
     "B3_replay": _B3,
+    "B3_pairs": replace(_B3, name="B3_pairs", replay_pairs=True),
     "B4_replay_kl": replace(_B3, name="B4_replay_kl", self_sampled_kl=True),
     "S_full": _S_FULL,
     "S_oracleq": replace(_S_FULL, name="S_oracleq", query_source="template"),

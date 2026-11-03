@@ -24,7 +24,7 @@ from ..handle import ModelHandle, PromptFormat
 from ..ledger import ComputeLedger
 from ..memory import DistractorSampler, Episode, EpisodicStore, format_context, make_retriever
 from ..signals import SignalCache, chd_safe
-from .commit import AuditItem, Decision, decide, measure_drift, measure_gaps, update_episodes
+from .commit import AuditItem, Decision, decide, drift_by_target, drift_change, measure_gaps, update_episodes
 from .compact import compact_and_repair, merge_only
 from .consolidate import (
     HardExample,
@@ -32,13 +32,27 @@ from .consolidate import (
     TokenTargets,
     build_self_sampled_targets,
     build_targets,
+    estimate_step_tokens,
     hard_examples,
+    pair_examples,
     train_loop,
 )
-from .queries import Candidate, PairQueryGen, WorldLike, generate_singles, make_query_gen, normalize_query, split_heldout
+from .queries import (
+    Candidate,
+    PairQueryGen,
+    WorldLike,
+    build_anchor_pool,
+    choose_pairs,
+    generate_singles,
+    make_query_gen,
+    normalize_query,
+    pair_stats,
+    split_heldout,
+)
 from .select import (
+    NO_THRESHOLDS,
     Partition,
-    Thresholds,
+    draw_distractor,
     null_distribution,
     partition,
     thresholds_from_null,
@@ -96,7 +110,7 @@ class State:
             tokenizer,
             device,
             ComputeLedger(),
-            PromptFormat(cfg.model.prompt_template, cfg.model.empty_context),
+            PromptFormat(cfg.model.prompt_template, cfg.model.empty_context, chat=cfg.model.chat),
             cfg.model.batch_size,
             cfg.model.fp16,
             eos_ids,
@@ -206,30 +220,25 @@ def active_stage_fractions(arm: ArmConfig, cfg: NightConfig) -> dict[str, float]
     return fractions
 
 
-def _uniform_counts(cfg: NightConfig, night: int, side: str, candidates: Sequence[Candidate]) -> tuple[int, int, str]:
-    """(n_integrate, n_anchor, source) for a uniform draw: matched to the paired CHD arm, else fractions."""
+def _uniform_anchor_count(cfg: NightConfig, night: int, side: str, pool_size: int) -> tuple[int, str]:
+    """(n_anchor, source) for a draw without CHD: matched to the paired CHD arm, else a fraction of the pool."""
     matched = cfg.select.matched_selection
     record = matched.get(str(night)) if matched else None
     if record is not None:
-        return int(record[side]["integrate"]), int(record[side]["anchor"]), "matched"
-    usable = sum(1 for c in candidates if c.context)
-    return (
-        math.ceil(cfg.select.uniform_integrate_frac * usable),
-        math.floor(cfg.select.uniform_anchor_frac * usable),
-        "fraction",
-    )
+        return int(record[side]["anchor"]), "matched"
+    return math.floor(cfg.select.uniform_anchor_frac * pool_size), "fraction"
 
 
 def anchor_teacher(
-    query: str, arm: ArmConfig, consolidated: Sequence[Episode], lexical_min: float
+    query: str, arm: ArmConfig, older: Sequence[Episode], lexical_min: float
 ) -> tuple[str, Optional[str]]:
-    """(banks, context) of an anchor's target (THEORY stage 3).
+    """(banks, context) of an anchor's target (THEORY stage 3). `older`: real episodes from before tonight.
 
-    A query touching consolidated knowledge uses the committed model with those episodes in context.
-    Anything else uses germline, which cannot compound across nights; `anchors="chain"` swaps in yesterday's
-    model at exactly this point.
+    A query touching older knowledge uses the committed model with those episodes in context, so it does not pull
+    against their hard labels. Anything else uses germline, which cannot compound across nights;
+    `anchors="chain"` swaps in yesterday's model at exactly this point.
     """
-    touching = touching_episodes(query, consolidated, lexical_min)
+    touching = touching_episodes(query, older, lexical_min)
     if touching:
         return "committed", format_context(touching)
     return ("committed" if arm.anchors == "chain" else "germline"), None
@@ -245,19 +254,30 @@ def hard_pool_examples(
     heldout: set[str],
 ) -> list[HardExample]:
     """new: tonight's episodes. all_real: uniform replay. selected: as all_real, with episodes that
-    have integration queries sampled `boost` times as often."""
+    have integration queries sampled `boost` times as often. With `replay_pairs`, also the pairs chosen so far."""
     replayable = store.replayable()
     if arm.hard_pool == "none":
         return []
     if arm.hard_pool == "new":
-        return hard_examples(handle, [e for e in replayable if e.id in new_ids], heldout)
-    if arm.hard_pool == "all_real":
-        return hard_examples(handle, replayable, heldout)
-    boosted = {episode_id for c in integrate for episode_id in c.episode_ids}
-    episodes: list[Episode] = []
-    for episode in replayable:
-        episodes.extend([episode] * (boost if episode.id in boosted else 1))
-    return hard_examples(handle, episodes, heldout)
+        examples = hard_examples(handle, [e for e in replayable if e.id in new_ids], heldout)
+    elif arm.hard_pool == "all_real":
+        examples = hard_examples(handle, replayable, heldout)
+    else:
+        boosted = {episode_id for c in integrate for episode_id in c.episode_ids}
+        episodes: list[Episode] = []
+        for episode in replayable:
+            episodes.extend([episode] * (boost if episode.id in boosted else 1))
+        examples = hard_examples(handle, episodes, heldout)
+    if arm.replay_pairs:
+        current = {e.id for e in replayable}
+        pairs = [
+            (e, store.get(other))
+            for e in replayable
+            for other in e.meta.get("replay_pairs", [])
+            if other in current  # A superseded partner would replay a stale value.
+        ]
+        examples += pair_examples(handle, pairs)
+    return examples
 
 
 def _attach_context_and_distractor(
@@ -278,8 +298,7 @@ def _attach_context_and_distractor(
         if not candidate.context:
             candidate.distractor = None
             continue
-        distractor = sampler.sample(candidate.entities, len(candidate.context), generator, candidate.episode_ids)
-        candidate.distractor = format_context([distractor]) if distractor is not None else None
+        candidate.distractor, _ = draw_distractor(candidate, sampler, generator)
 
 
 def _load_old_items(store: EpisodicStore, skip: set[tuple[str, str]]) -> list[AuditItem]:
@@ -295,6 +314,45 @@ def _load_old_items(store: EpisodicStore, skip: set[tuple[str, str]]) -> list[Au
                 skip.add((item.query, item.context))
                 items.append(item)
     return items
+
+
+def _shuffled(items: Sequence, generator: torch.Generator) -> list:
+    return [items[i] for i in torch.randperm(len(items), generator=generator).tolist()]
+
+
+def _control_items(
+    candidates: Sequence[Candidate], sampler: DistractorSampler, n: int, generator: torch.Generator
+) -> list[AuditItem]:
+    """The null control for the audit: held-out queries between two contexts unrelated to them."""
+    items: list[AuditItem] = []
+    for candidate in candidates[:n]:
+        first, first_ids = draw_distractor(candidate, sampler, generator)
+        if first is None:
+            continue
+        second, _ = draw_distractor(candidate, sampler, generator, first_ids)
+        if second is not None:
+            items.append(AuditItem(candidate.query, first, second, ()))
+    return items
+
+
+def _release_surplus(
+    ledger: ComputeLedger,
+    hard: Sequence[HardExample],
+    integrate: Sequence[TokenTargets],
+    anchor: Sequence[TokenTargets],
+    cfg: NightConfig,
+    audit_after_need: float,
+) -> None:
+    """Give training whatever repair and the after-audit will not need, so that no stage ends with unspent tokens."""
+    if "repair" in ledger.caps:
+        need = math.ceil(cfg.commit.after_margin * cfg.compact.repair_steps * estimate_step_tokens(hard, integrate, anchor, cfg.train))
+        surplus = ledger.remaining("repair") - need
+        if surplus > 0:
+            ledger.transfer("repair", "train", surplus)
+    if "audit" in ledger.caps:
+        surplus = ledger.remaining("audit") - math.ceil(cfg.commit.after_margin * audit_after_need)
+        if surplus > 0:
+            ledger.transfer("audit", "train", surplus)
 
 
 def run_night(state: State, cfg: NightConfig) -> NightReport:
@@ -321,10 +379,14 @@ def run_night(state: State, cfg: NightConfig) -> NightReport:
     snapshot = delta.snapshot()
     cache = SignalCache()
     new_ids = {e.id for e in new_episodes}
+    k, max_new = cfg.signals.k, cfg.signals.max_new_tokens
 
     # ---- Stage 1a: candidates for tonight's episodes, split before anything can be selected or trained on.
+    singles: list[Candidate] = []
     train_cands: list[Candidate] = []
     held_cands: list[Candidate] = []
+    pool_train: list[Candidate] = []
+    pool_held: list[Candidate] = []
     query_gen = None
     synthesis_exhausted = False
     with handle.banks("committed"):
@@ -337,52 +399,56 @@ def run_night(state: State, cfg: NightConfig) -> NightReport:
             )
             state.heldout |= held
 
-        # ---- Null distribution, then the write gate.
-        pool = list(store.all_real()) + list(world.distractor_pool()) + new_episodes
-        sampler = DistractorSampler(pool, cfg.select.distractor_length_tol)
-        thresholds = Thresholds(None, None, None, "none", 0)
+        # ---- Null distribution, then the write gate, each within its share so that scoring keeps a reserve.
+        sampler_pool = list(store.all_real()) + list(world.distractor_pool()) + new_episodes
+        sampler = DistractorSampler(sampler_pool, cfg.select.distractor_length_tol)
+        thresholds = pair_thresholds = NO_THRESHOLDS
         signals_exhausted = False
-        if arm.selection or arm.write_gate:
+        signals_total = ledger.remaining("signals") if "signals" in ledger.caps else 0
+        null_budget = signals_total * cfg.select.null_share / (2 if arm.pair_contexts else 1)
+        if "signals" in ledger.caps:
             with ledger.stage("signals"):
-                null, signals_exhausted = null_distribution(
-                    handle, train_cands, sampler, cfg.select, cfg.signals, rng("null"), cache
-                )
+                with ledger.limit(int(null_budget)):
+                    null, signals_exhausted = null_distribution(
+                        handle, train_cands, sampler, cfg.signals, cfg.select.n_null, rng("null"), cache
+                    )
                 thresholds = thresholds_from_null(null, cfg.select)
                 gate_rng = rng("wake")
-                for episode in new_episodes:
-                    probes = _gate_probes(episode, train_cands, sampler, gate_rng)
-                    outcome = observe(
-                        handle,
-                        store,
-                        episode,
-                        probes,
-                        thresholds.gate,
-                        cfg.signals.k,
-                        cfg.signals.max_new_tokens,
-                        gate_rng,
-                        cache,
-                        cfg.signals.chunk,
-                        bypass=not arm.write_gate,
-                    )
-                    report.wake.append(asdict(outcome))
+                with ledger.limit(int(signals_total * cfg.select.gate_share)):
+                    for episode in new_episodes:
+                        outcome = observe(
+                            handle,
+                            store,
+                            episode,
+                            _gate_probe(episode, train_cands, sampler, gate_rng),
+                            thresholds.gate,
+                            k,
+                            max_new,
+                            gate_rng,
+                            cache,
+                            cfg.signals.chunk,
+                            bypass=not arm.write_gate,
+                        )
+                        report.wake.append(asdict(outcome))
         else:
             for episode in new_episodes:
                 store.add(episode)
             report.wake = [{"episode_id": e.id, "stored": True, "reason": "bypass"} for e in new_episodes]
 
-        stored_new = {e.id for e in new_episodes if e.id in store}
-        gated = new_ids - stored_new
-        train_cands = [c for c in train_cands if not set(c.episode_ids) & gated]
-        held_cands = [c for c in held_cands if not set(c.episode_ids) & gated]
+        deferred = {e.id for e in new_episodes if store.get(e.id).status == "deferred"}
+        train_cands = [c for c in train_cands if not set(c.episode_ids) & deferred]
+        held_cands = [c for c in held_cands if not set(c.episode_ids) & deferred]
+        for candidate in singles:
+            store.get(candidate.episode_ids[0]).meta.setdefault("queries", []).append(candidate.query)
 
-        # ---- Stage 1b: pair contexts need the store to hold tonight's episodes.
+        # ---- Stage 1b: pair contexts need the store to hold tonight's episodes. Then the anchor pool.
         pair_count = 0
-        pair_stats: dict[str, int] = {}
+        chosen_pairs: dict[str, int] = {}
         if arm.pair_contexts and query_gen is not None:
             pair_gen = PairQueryGen(query_gen, cfg.queries.max_pairs)
             with ledger.stage("synthesis"):
-                pair_cands, pairs_exhausted = pair_gen.generate(store, stored_new, rng("query_pairs"))
-            pair_stats = pair_gen.stats
+                pair_cands, pairs_exhausted = pair_gen.generate(store, new_ids, rng("query_pairs"))
+            chosen_pairs = pair_gen.stats
             synthesis_exhausted = synthesis_exhausted or pairs_exhausted
             pair_count = len(pair_cands)
             pair_train, pair_held, held = split_heldout(
@@ -391,97 +457,151 @@ def run_night(state: State, cfg: NightConfig) -> NightReport:
             state.heldout |= held
             train_cands += pair_train
             held_cands += pair_held
+            if arm.selection:
+                with ledger.stage("signals"), ledger.limit(int(null_budget)):
+                    pair_null, exhausted = null_distribution(
+                        handle, pair_train, sampler, cfg.signals, cfg.select.n_null_pair, rng("null_pair"), cache
+                    )
+                    signals_exhausted = signals_exhausted or exhausted
+                pair_thresholds = thresholds_from_null(pair_null, cfg.select)
+        if arm.replay_pairs:
+            pairs = [(a, b) for a, b in store.pairs_sharing_entity() if a.id in new_ids or b.id in new_ids]
+            picked = choose_pairs(pairs, cfg.queries.max_pairs, rng("replay_pairs"))
+            for a, b in picked:
+                a.meta.setdefault("replay_pairs", []).append(b.id)
+            chosen_pairs = pair_stats(pairs, picked)
+        if arm.anchors != "none":
+            with ledger.stage("synthesis"):
+                pool, exhausted = build_anchor_pool(handle, store, world, new_ids, cfg.queries, rng("anchor_pool"))
+            synthesis_exhausted = synthesis_exhausted or exhausted
+            pool_train, pool_held, held = split_heldout(pool, state.world_seed, cfg.commit.heldout_frac, state.heldout)
+            state.heldout |= held
         if "synthesis" in ledger.caps:
             ledger.close_stage("synthesis")
-        # A query can become held out through a pair after its single was split. Held-out always wins.
+        # A query can become held out after its first split. Held-out always wins.
         train_cands = [c for c in train_cands if normalize_query(c.query) not in state.heldout]
+        pool_train = [c for c in pool_train if normalize_query(c.query) not in state.heldout]
+        tonight_queries = {normalize_query(c.query) for c in train_cands + held_cands}
+        pool_train = [c for c in pool_train if normalize_query(c.query) not in tonight_queries]
+        pool_held = [c for c in pool_held if normalize_query(c.query) not in tonight_queries]
         report.synthesis = {
             "train_candidates": len(train_cands),
             "heldout_candidates": len(held_cands),
             "pair_candidates": pair_count,
-            "pairs": pair_stats,
+            "pairs": chosen_pairs,
+            "anchor_pool_train": len(pool_train),
+            "anchor_pool_heldout": len(pool_held),
             "exhausted": synthesis_exhausted,
         }
 
-        all_cands = train_cands + held_cands
-        _attach_context_and_distractor(all_cands, store, arm, sampler, cfg.retrieval_k, rng("distractors"))
+        _attach_context_and_distractor(train_cands + held_cands, store, arm, sampler, cfg.retrieval_k, rng("distractors"))
+        distractor_rng = rng("pool_distractors")
+        for candidate in pool_train + pool_held:
+            candidate.distractor, _ = draw_distractor(candidate, sampler, distractor_rng)
 
-        # ---- Audit baseline on the weights we would roll back to. Paid from the audit stage.
+        # ---- Audit, before training, on the weights we would roll back to. Paid from the audit stage, within a
+        # share that keeps enough for the after pass.
         items: list[AuditItem] = []
-        gate_flags: list[bool] = []
+        control: list[AuditItem] = []
+        gate_count = 0
         gaps_before: list[Optional[float]] = []
+        control_before: list[Optional[float]] = []
+        drift_before: list = []
+        heldout_anchor_targets: list[TokenTargets] = []
+        audit_after_need = 0
         audit_exhausted = False
         held_part = Partition()
+        older = [e for e in store.replayable() if e.id not in new_ids]
         if arm.audit:
-            auditable = [c for c in held_cands if c.context and c.distractor is not None]
-            auditable = auditable[: cfg.commit.audit_max_items]
-            new_items = [AuditItem(c.query, c.context, c.distractor, c.episode_ids) for c in auditable]
-            seen = {(i.query, i.context) for i in new_items}
-            old_items = _load_old_items(store, seen)[: max(0, cfg.commit.audit_max_items - len(new_items))]
-            items = new_items + old_items
-            with ledger.stage("audit"):
-                gaps_before, audit_exhausted = measure_gaps(
-                    handle, items, state.world_seed, night, cfg.signals.k, cfg.signals.max_new_tokens
-                )
-            new_gaps = gaps_before[: len(new_items)]
-            if arm.selection:
-                held_part = partition(auditable, new_gaps, thresholds, cfg.select.lexical_min)
-            else:
-                n_integrate, n_anchor, _ = _uniform_counts(cfg, night, "heldout", auditable)
-                held_part = uniform_partition(
-                    auditable, n_integrate, n_anchor, cfg.select.lexical_min, rng("uniform_heldout")
-                )
-            integrate_ids = {id(c) for c in held_part.integrate}
-            gate_flags = [id(c) in integrate_ids for c in auditable] + [False] * len(old_items)
-            for candidate, item in zip(auditable, new_items):
-                if id(candidate) in integrate_ids:
+            cap = cfg.commit.audit_max_items
+            auditable = _shuffled([c for c in held_cands if c.context and c.distractor is not None], rng("audit_order"))
+            all_old = _load_old_items(store, {(c.query, c.context) for c in auditable})
+            auditable = auditable[: cap - min(len(all_old), int(cap * cfg.commit.old_item_share))]
+            old_items = all_old[: cap - len(auditable)]
+            anchor_cands = _shuffled(
+                [c for c in pool_held if c.distractor is not None], rng("audit_anchor_order")
+            )[: cfg.commit.audit_max_anchors]
+            with ledger.stage("audit"), ledger.limit(int(ledger.remaining("audit") * cfg.commit.audit_pre_share)):
+                if arm.selection:
+                    # Flagging on an independent measurement, so that the before/after test has no selection bias.
+                    flag_items = [AuditItem(c.query, c.context, c.distractor, c.episode_ids) for c in auditable + anchor_cands]
+                    flags, audit_exhausted = measure_gaps(handle, flag_items, state.world_seed, night, k, max_new, "audit_flag")
+                    held_part = partition(auditable + anchor_cands, flags, thresholds, pair_thresholds)
+                else:
+                    n_anchor, _ = _uniform_anchor_count(cfg, night, "heldout", len(anchor_cands))
+                    held_part = uniform_partition(auditable, anchor_cands, n_anchor, rng("uniform_heldout"))
+                flagged = [c for c in held_part.integrate if c.distractor is not None]
+                new_items = [AuditItem(c.query, c.context, c.distractor, c.episode_ids) for c in flagged]
+                for candidate, item in zip(flagged, new_items):
                     # Kept for later nights' pressure and retirement. Stored once, on the first episode.
                     store.get(candidate.episode_ids[0]).meta.setdefault("audit_items", []).append(item.to_dict())
+                items = new_items + old_items
+                gate_count = len(new_items)
+                after_start = ledger.spent("audit")
+                gaps_before, exhausted = measure_gaps(handle, items, state.world_seed, night, k, max_new)
+                audit_exhausted = audit_exhausted or exhausted
+                control = _control_items(auditable, sampler, cfg.commit.control_items, rng("audit_control"))
+                control_before, exhausted = measure_gaps(handle, control, state.world_seed, night, k, max_new)
+                audit_exhausted = audit_exhausted or exhausted
+                if arm.anchors != "none" and held_part.anchor:
+                    specs = _anchor_specs(held_part.anchor, arm, older, cfg.select.lexical_min)
+                    heldout_anchor_targets, exhausted = build_targets(handle, specs, cfg.teacher, rng("audit_anchors"))
+                    audit_exhausted = audit_exhausted or exhausted
+                    drift_before, exhausted = drift_by_target(handle, heldout_anchor_targets)
+                    audit_exhausted = audit_exhausted or exhausted
+                audit_after_need = ledger.spent("audit") - after_start
 
-        # ---- Stage 1c: score and partition the training candidates.
+        # ---- Stage 1c: score candidates in a seeded mixed order, so that a short budget falls evenly on singles,
+        # pairs and anchors rather than on whatever came last.
         if arm.selection:
             with ledger.stage("signals"):
-                scorable = [c for c in train_cands if c.context and c.distractor is not None]
+                scorable = _shuffled(
+                    [c for c in train_cands + pool_train if c.context and c.distractor is not None], rng("select_order")
+                )
                 values, exhausted = chd_safe(
                     handle,
                     [(c.query, c.context, c.distractor) for c in scorable],
-                    cfg.signals.k,
-                    cfg.signals.max_new_tokens,
+                    k,
+                    max_new,
                     rng("select"),
                     cache,
                     cfg.signals.chunk,
                 )
                 signals_exhausted = signals_exhausted or exhausted
             value_by_id = {id(c): v for c, v in zip(scorable, values)}
+            everything = train_cands + pool_train
             train_part = partition(
-                train_cands, [value_by_id.get(id(c)) for c in train_cands], thresholds, cfg.select.lexical_min
+                everything, [value_by_id.get(id(c)) for c in everything], thresholds, pair_thresholds
             )
             count_source = "chd"
         else:
-            n_integrate, n_anchor, count_source = _uniform_counts(cfg, night, "train", train_cands)
-            train_part = uniform_partition(
-                train_cands, n_integrate, n_anchor, cfg.select.lexical_min, rng("uniform_train")
-            )
+            n_anchor, count_source = _uniform_anchor_count(cfg, night, "train", len(pool_train))
+            train_part = uniform_partition(train_cands, pool_train, n_anchor, rng("uniform_train"))
         if "signals" in ledger.caps:
             ledger.close_stage("signals")
         report.signals = {
             "null_size": thresholds.null_size,
+            "pair_null_size": pair_thresholds.null_size,
             "threshold_source": thresholds.source,
+            "pair_threshold_source": pair_thresholds.source,
             "integrate_threshold": thresholds.integrate,
             "anchor_threshold": thresholds.anchor,
             "gate_threshold": thresholds.gate,
+            "gate_deferred": len(deferred),
+            "gate_rate": len(deferred) / len(new_episodes) if new_episodes else 0.0,
             "exhausted": signals_exhausted,
         }
+        total_candidates = len(train_cands) + len(pool_train)
+        unscored = train_part.discarded["unscored"]
         report.selection = {
             "train": train_part.summary(),
             "heldout": held_part.summary(),
             "count_source": count_source,
+            "unscored": unscored,
+            "unscored_fraction": unscored / total_candidates if total_candidates else 0.0,
         }
 
     # ---- Stage 2, first half: all teacher targets, frozen for the rest of the night.
-    consolidated = [
-        e for e in store.replayable() if e.meta.get("consolidated_night") is not None and e.id not in new_ids
-    ]
     integrate_targets: list[TokenTargets] = []
     anchor_targets: list[TokenTargets] = []
     teacher_exhausted = False
@@ -496,7 +616,7 @@ def run_night(state: State, cfg: NightConfig) -> NightReport:
                 integrate_targets, exhausted = build_targets(handle, specs, cfg.teacher, teacher_rng, cache)
                 teacher_exhausted = teacher_exhausted or exhausted
             if arm.anchors != "none":
-                specs = _anchor_specs(train_part.anchor, arm, consolidated, cfg.select.lexical_min)
+                specs = _anchor_specs(train_part.anchor, arm, older, cfg.select.lexical_min)
                 anchor_targets, exhausted = build_targets(handle, specs, cfg.teacher, teacher_rng, cache)
                 teacher_exhausted = teacher_exhausted or exhausted
             if arm.self_sampled_kl:
@@ -510,17 +630,9 @@ def run_night(state: State, cfg: NightConfig) -> NightReport:
         "exhausted": teacher_exhausted,
     }
 
-    heldout_anchor_targets: list[TokenTargets] = []
-    if arm.audit and arm.anchors != "none" and held_part.anchor:
-        with ledger.stage("audit"):
-            specs = _anchor_specs(held_part.anchor, arm, consolidated, cfg.select.lexical_min)
-            heldout_anchor_targets, exhausted = build_targets(handle, specs, cfg.teacher, rng("audit_anchors"))
-            audit_exhausted = audit_exhausted or exhausted
-
     # ---- Stage 2, second half: training. Fresh is the only thing that moves.
-    hard = hard_pool_examples(
-        arm, store, handle, stored_new, train_part.integrate, cfg.select.hard_boost, state.heldout
-    )
+    hard = hard_pool_examples(arm, store, handle, new_ids, train_part.integrate, cfg.select.hard_boost, state.heldout)
+    _release_surplus(ledger, hard, integrate_targets, anchor_targets, cfg, audit_after_need)
     with ledger.stage("train"):
         train_result = train_loop(handle, hard, integrate_targets, anchor_targets, cfg.train, rng("train"))
     ledger.close_stage("train")
@@ -546,25 +658,30 @@ def run_night(state: State, cfg: NightConfig) -> NightReport:
     else:
         report.compaction = merge_only(handle)
 
-    # ---- Stage 5: audit and commit.
+    # ---- Stage 5: audit and commit, on the same items and targets as before training.
     decision = Decision(accepted=True, reasons=["no_audit"])
     gaps_after: list[Optional[float]] = [None] * len(items)
     if arm.audit:
         with handle.banks("committed"), ledger.stage("audit"):
-            gaps_after, exhausted = measure_gaps(
-                handle, items, state.world_seed, night, cfg.signals.k, cfg.signals.max_new_tokens
-            )
+            gaps_after, exhausted = measure_gaps(handle, items, state.world_seed, night, k, max_new)
             audit_exhausted = audit_exhausted or exhausted
-            drift, exhausted = measure_drift(handle, heldout_anchor_targets)
+            control_after, exhausted = measure_gaps(handle, control, state.world_seed, night, k, max_new)
             audit_exhausted = audit_exhausted or exhausted
+            drift_after, exhausted = drift_by_target(handle, heldout_anchor_targets)
+            audit_exhausted = audit_exhausted or exhausted
+        mean_before, mean_after = drift_change(drift_before, drift_after)
+        increase = mean_after - mean_before if mean_before is not None and mean_after is not None else None
         decision = decide(
-            [g for g, flag in zip(gaps_before, gate_flags) if flag],
-            [g for g, flag in zip(gaps_after, gate_flags) if flag],
-            drift,
+            gaps_before[:gate_count],
+            gaps_after[:gate_count],
+            increase,
             cfg.commit,
             arm.transactional,
             audit_exhausted,
+            control_before,
+            control_after,
         )
+        decision.anchor_drift_before, decision.anchor_drift_after = mean_before, mean_after
     if not decision.accepted:
         delta.restore(snapshot)
     trained = set(train_result.trained_episode_ids)
@@ -602,25 +719,23 @@ def _finish(state: State, report: NightReport) -> NightReport:
     return report
 
 
-def _gate_probes(
+def _gate_probe(
     episode: Episode, candidates: Sequence[Candidate], sampler: DistractorSampler, generator: torch.Generator
 ) -> list[tuple[str, str]]:
-    """(query, distractor context) for the write gate, on this episode's training queries only."""
-    probes = []
-    for candidate in candidates:
-        if candidate.episode_ids != (episode.id,):
-            continue
-        distractor = sampler.sample(candidate.entities, len(candidate.context), generator, candidate.episode_ids)
-        if distractor is not None:
-            probes.append((candidate.query, format_context([distractor])))
-    return probes
+    """One seeded (query, distractor context) for the write gate, from this episode's training queries."""
+    own = [c for c in candidates if c.episode_ids == (episode.id,)]
+    if not own:
+        return []
+    candidate = own[int(torch.randint(len(own), (1,), generator=generator))]
+    distractor, _ = draw_distractor(candidate, sampler, generator)
+    return [(candidate.query, distractor)] if distractor is not None else []
 
 
 def _anchor_specs(
-    candidates: Sequence[Candidate], arm: ArmConfig, consolidated: Sequence[Episode], lexical_min: float
+    candidates: Sequence[Candidate], arm: ArmConfig, older: Sequence[Episode], lexical_min: float
 ) -> list[TargetSpec]:
     specs = []
     for candidate in candidates:
-        banks, context = anchor_teacher(candidate.query, arm, consolidated, lexical_min)
+        banks, context = anchor_teacher(candidate.query, arm, older, lexical_min)
         specs.append(TargetSpec(candidate.query, context, banks, "anchor"))
     return specs

@@ -4,7 +4,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from tiny import EOS, ContextCategoricalStub, TinyTokenizer, tiny_gpt2
+from tiny import EOS, BigramStub, ContextCategoricalStub, TinyTokenizer, tiny_gpt2
 
 from llmsleep.config import SelectConfig, SignalConfig
 from llmsleep.handle import ModelHandle, PromptFormat
@@ -281,29 +281,34 @@ def test_tiny_null_falls_back_to_extremes_and_empty_null_selects_nothing():
     assert t.source == "extremes" and t.integrate == 3.0 and t.anchor == 1.0 and t.gate == 1.0
     empty = thresholds_from_null([], cfg)
     assert empty.source == "none" and empty.integrate is None
-    out = partition([_candidate()], [5.0], empty, 0.3)
+    out = partition([_candidate()], [5.0], empty)
     assert out.integrate == [] and out.anchor == []
     assert out.discarded["no_null"] == 1
 
 
+def _pool_candidate() -> Candidate:
+    return Candidate("Who is Zed?", ("old",), ("Zed",), context="Zed sails.", distractor="x", pool=True)
+
+
 def test_partition_routes_each_case_and_counts_every_discard():
     t = Thresholds(integrate=2.0, anchor=1.0, gate=1.0, source="quantile", null_size=20)
-    near = _candidate()
-    far = _candidate(query="Name a color of rainbows?")
+    anchor = _pool_candidate()
     cases = [
         (_candidate(), 3.0),  # integrate
-        (near, 0.5),  # anchor
-        (far, 0.5),  # low CHD, lexically far
+        (anchor, 0.5),  # anchor: from the pool, and low
+        (_pool_candidate(), 1.5),  # pool, not low
+        (_pool_candidate(), 3.0),  # pool, high: pool queries never integrate
+        (_candidate(), 0.5),  # tonight's query, low: never an anchor
         (_candidate(), 1.5),  # between thresholds
         (_candidate(context=""), 3.0),  # no context
         (_candidate(distractor=None), 3.0),  # no distractor
         (_candidate(), None),  # budget ran out
     ]
-    out = partition([c for c, _ in cases], [v for _, v in cases], t, 0.3)
-    assert len(out.integrate) == 1 and out.anchor == [near]
+    out = partition([c for c, _ in cases], [v for _, v in cases], t)
+    assert len(out.integrate) == 1 and out.anchor == [anchor]
     assert dict(out.discarded) == {
-        "low_chd_far": 1,
-        "mid_chd": 1,
+        "pool_not_low": 2,
+        "low_or_mid_chd": 2,
         "no_context": 1,
         "no_distractor": 1,
         "unscored": 1,
@@ -312,33 +317,85 @@ def test_partition_routes_each_case_and_counts_every_discard():
     assert summary["integrate"] + summary["anchor"] + sum(summary["discarded"].values()) == len(cases)
 
 
+def test_pairs_use_their_own_null():
+    singles = Thresholds(integrate=5.0, anchor=1.0, gate=1.0, source="quantile", null_size=20)
+    pairs = Thresholds(integrate=2.0, anchor=1.0, gate=1.0, source="quantile", null_size=20)
+    pair = Candidate("Q?", ("a", "b"), ("X",), is_pair=True, context="a\nb", distractor="x")
+    single = _candidate()
+    out = partition([pair, single], [3.0, 3.0], singles, pairs)
+    assert out.integrate == [pair] and out.discarded["low_or_mid_chd"] == 1
+
+
 def test_partition_of_nothing_is_fine():
-    out = partition([], [], Thresholds(1.0, 0.0, 0.0, "quantile", 9), 0.3)
+    out = partition([], [], Thresholds(1.0, 0.0, 0.0, "quantile", 9))
     assert out.summary() == {"integrate": 0, "anchor": 0, "discarded": {}}
 
 
-def test_null_distribution_compares_two_unrelated_distractors():
+def test_null_distribution_compares_two_different_unrelated_distractors(monkeypatch):
+    import llmsleep.phases.select as select_module
+
+    seen = []
+    original = select_module.chd_safe
+
+    def recording(handle, items, *args, **kwargs):
+        seen.extend(items)
+        return original(handle, items, *args, **kwargs)
+
+    monkeypatch.setattr(select_module, "chd_safe", recording)
     handle = _stub_handle()
     cand = Candidate("d", ("e",), ("Mira",), context="a")
     pool = [Episode("x", "a", 0, entities=["X"]), Episode("y", "b", 0, entities=["Y"]), Episode("m", "a", 0, entities=["Mira"])]
     values, exhausted = null_distribution(
-        handle,
-        [cand],
-        DistractorSampler(pool),
-        SelectConfig(n_null=1),
-        SignalConfig(k=4, max_new_tokens=2),
-        torch.Generator().manual_seed(22),
+        handle, [cand], DistractorSampler(pool), SignalConfig(k=4, max_new_tokens=2), 1, torch.Generator().manual_seed(22)
     )
     assert len(values) == 1 and not exhausted
+    assert {seen[0][1], seen[0][2]} == {"a", "b"}  # With second = first the null would be zero.
+
+
+def test_pair_null_uses_two_episode_contexts(monkeypatch):
+    import llmsleep.phases.select as select_module
+
+    seen = []
+    monkeypatch.setattr(select_module, "chd_safe", lambda h, items, *a, **k: (seen.extend(items), ([0.0], False))[1])
+    pool = [Episode(str(i), "ab"[i % 2], 0, entities=[f"E{i}"]) for i in range(4)]
+    pair = Candidate("d", ("p", "q"), ("Mira",), is_pair=True, context="a\nb")
+    null_distribution(
+        _stub_handle(), [pair], DistractorSampler(pool), SignalConfig(k=1, max_new_tokens=1), 1, torch.Generator().manual_seed(1)
+    )
+    assert seen[0][1].count("\n") == 1 and seen[0][2].count("\n") == 1
 
 
 def test_null_distribution_with_no_distractors_or_candidates_is_empty():
     handle = _stub_handle()
     sampler = DistractorSampler([Episode("m", "a", 0, entities=["Mira"])])
-    cfg, sig = SelectConfig(n_null=2), SignalConfig(k=2, max_new_tokens=2)
+    sig = SignalConfig(k=2, max_new_tokens=2)
     cand = Candidate("d", ("e",), ("Mira",), context="a")
-    assert null_distribution(handle, [cand], sampler, cfg, sig, torch.Generator()) == ([], False)
-    assert null_distribution(handle, [], sampler, cfg, sig, torch.Generator()) == ([], False)
+    assert null_distribution(handle, [cand], sampler, sig, 2, torch.Generator()) == ([], False)
+    assert null_distribution(handle, [], sampler, sig, 2, torch.Generator()) == ([], False)
+
+
+def test_chd_safe_reports_per_token_by_default():
+    handle = _stub_handle()
+    items = [("d", "a", "b")]
+    per_token, _ = chd_safe(handle, items, 8, 3, torch.Generator().manual_seed(23))
+    expected = chd(handle, ["d"], ["a"], ["b"], 8, 3, torch.Generator().manual_seed(23))
+    assert per_token[0] == pytest.approx(float(expected.per_token[0]))
+    total, _ = chd_safe(handle, items, 8, 3, torch.Generator().manual_seed(23), per_token=False)
+    assert total[0] == pytest.approx(float(expected.values[0]))
+
+
+def test_chd_stops_at_a_newline_on_both_sides():
+    """A1.9: only the answer counts. After the newline a raw model runs on, and that must not enter the signal."""
+    tok = TinyTokenizer("ab\n")
+    newline = 4
+    table = torch.full((tok.vocab_size, tok.vocab_size), -50.0)
+    table[:, newline] = 50.0  # Everything leads straight to a newline.
+    table[newline, :] = -50.0
+    table[newline, 2] = 50.0
+    handle = ModelHandle(BigramStub(table), tok, "cpu", prompt_format=PromptFormat("{context}{query}"), batch_size=4)
+    result = chd(handle, ["a"], ["a"], ["b"], 4, 5, torch.Generator().manual_seed(1))
+    for sample in result.samples[0]:
+        assert sample.token_ids == [newline] and sample.finished
 
 
 def test_lexical_overlap_and_touching_episodes():

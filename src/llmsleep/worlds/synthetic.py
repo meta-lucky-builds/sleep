@@ -79,6 +79,7 @@ class WorldConfig:
     n_control_persons: int = 20  # Never-taught people, for entrenchment.
     n_entrench: int = 60
     min_name_distance: int = 3
+    banned_tokens: Sequence[str] = ()  # Name words E0's familiarity check says to replace.
 
     def __post_init__(self) -> None:
         if self.n_persons < 1 or self.n_orgs < 2 or self.n_cities < 2 or self.n_regions < 1 or self.nights < 1:
@@ -140,7 +141,7 @@ class SyntheticWorld:
         check_disjoint(iter_train_templates(self._train, self._pair_train), iter_eval_templates(self._eval))
 
         self.entities: dict[str, Entity] = {}
-        self._forge = NameForge(self._rng("names"), config.min_name_distance)
+        self._forge = NameForge(self._rng("names"), config.min_name_distance, config.banned_tokens)
         self._build_entities()
         self._facts_by_key: dict[str, list[Fact]] = {}
         self.fact_keys: list[str] = []
@@ -418,6 +419,13 @@ class SyntheticWorld:
     def vocabulary(self, attr: str) -> tuple[str, ...]:
         """All same-type answers of an attribute, or of "person"."""
         return self._vocab[attr]
+
+    def answer_groups(self, attr: str) -> list[tuple[str, ...]]:
+        """The distinct answers of an attribute, each with its accepted forms: how many values chance divides by."""
+        by_kind = {"employer": self.orgs, "hometown": self.cities, "hq_city": self.cities, "region": self.regions}
+        if attr in by_kind:
+            return [entity.aliases for entity in by_kind[attr]]
+        return [(form,) for form in self._vocab[attr]]
 
     def contradicting_value(self, fact: Fact, rng: SeededRng) -> str:
         """A same-type value that is not the fact's own."""

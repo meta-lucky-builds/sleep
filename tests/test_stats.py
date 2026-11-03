@@ -9,6 +9,7 @@ from llmsleep.eval.metrics import Tally
 from llmsleep.stats import (
     BootstrapResult,
     auroc,
+    binomial_tail,
     holm,
     non_inferior,
     paired_cluster_bootstrap,
@@ -103,6 +104,14 @@ def test_decision_helpers_need_ci_and_margin():
     assert non_inferior(BootstrapResult(-0.01, -0.02, 0.0, 0.5, 5, 50), 0.03)
     assert not non_inferior(BootstrapResult(-0.01, -0.04, 0.02, 0.5, 5, 50), 0.03)
     assert not supported_difference(BootstrapResult(0.1, math.nan, math.nan, math.nan, 5, 50), +1, 0.03)
+
+
+def test_binomial_tail_known_values():
+    assert binomial_tail(0, 10, 0.5) == 1.0
+    assert binomial_tail(10, 10, 0.5) == pytest.approx(1 / 1024)
+    assert binomial_tail(1, 2, 0.5) == pytest.approx(0.75)
+    # One lucky year in 16 probes against 1/50: nowhere near p < 0.01 (review H3).
+    assert binomial_tail(1, 16, 1 / 50) > 0.2
 
 
 def test_seed_bootstrap_and_slope():

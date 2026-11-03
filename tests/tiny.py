@@ -95,7 +95,7 @@ def _with_seed(seed: int, build):
         return build()
 
 
-def tiny_gpt2(vocab_size: int, seed: int = 0) -> nn.Module:
+def tiny_gpt2(vocab_size: int, seed: int = 0, attn: str = "eager") -> nn.Module:
     """2 layers, HF Conv1D linears. Dropout is zero."""
     from transformers import GPT2Config, GPT2LMHeadModel
 
@@ -111,12 +111,12 @@ def tiny_gpt2(vocab_size: int, seed: int = 0) -> nn.Module:
         bos_token_id=EOS,
         eos_token_id=EOS,
         pad_token_id=PAD,
-        attn_implementation="eager",
+        attn_implementation=attn,
     )
     return _with_seed(seed, lambda: GPT2LMHeadModel(config).eval())
 
 
-def tiny_qwen2(vocab_size: int, seed: int = 0) -> nn.Module:
+def tiny_qwen2(vocab_size: int, seed: int = 0, attn: str = "eager") -> nn.Module:
     """2 layers, nn.Linear attention and MLP."""
     from transformers import Qwen2Config, Qwen2ForCausalLM
 
@@ -134,7 +134,7 @@ def tiny_qwen2(vocab_size: int, seed: int = 0) -> nn.Module:
         bos_token_id=EOS,
         eos_token_id=EOS,
         pad_token_id=PAD,
-        attn_implementation="eager",
+        attn_implementation=attn,
     )
     return _with_seed(seed, lambda: Qwen2ForCausalLM(config).eval())
 
@@ -191,7 +191,7 @@ def small_config(arm, night_tokens: int = 80_000) -> NightConfig:
         budget=BudgetConfig(night_tokens=night_tokens),
         signals=SignalConfig(k=2, max_new_tokens=4, chunk=4),
         queries=QueryConfig(per_episode=4, model_samples=1, model_max_new_tokens=8, max_pairs=2),
-        select=SelectConfig(n_null=8, min_null=4),
+        select=SelectConfig(n_null=8, n_null_pair=4, min_null=4),
         teacher=TeacherConfig(samples=1, max_new_tokens=4, top_k=8, self_samples=4, self_max_new_tokens=4),
         train=TrainConfig(lr=1e-3, hard_batch=2, kl_batch=2, anchor_batch=2, max_steps=4),
         compact=CompactConfig(threshold=0.01, max_rank=6, repair_steps=2),
