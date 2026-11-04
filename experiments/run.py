@@ -433,11 +433,14 @@ def run_experiment(
     device: Optional[str] = None,
     arms: Optional[Sequence[str]] = None,
     seeds: Optional[Sequence[int]] = None,
+    variants: Optional[Sequence[str]] = None,
 ) -> list[Path]:
     validate_config(config)
     done = []
     for cell in expand_cells(config):
         if (arms is not None and cell.arm not in arms) or (seeds is not None and cell.seed not in seeds):
+            continue
+        if variants is not None and cell.variant not in variants:
             continue
         if config.get("mode") == "eval_checkpoints":
             done.append(evaluate_checkpoint(config, cell, Path(out), factory, code_hash, device))
@@ -454,10 +457,11 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     parser.add_argument("--device", default=None)
     parser.add_argument("--arms", nargs="*", default=None, help="run only these arms, for sharding sessions")
     parser.add_argument("--seeds", nargs="*", type=int, default=None)
+    parser.add_argument("--variants", nargs="*", default=None, help="run only these variants")
     args = parser.parse_args(argv)
     with open(args.config, "r", encoding="utf-8") as stream:
         config = json.load(stream)
-    run_experiment(config, Path(args.out), code_hash=args.code_hash, device=args.device, arms=args.arms, seeds=args.seeds)
+    run_experiment(config, Path(args.out), code_hash=args.code_hash, device=args.device, arms=args.arms, seeds=args.seeds, variants=args.variants)
 
 
 if __name__ == "__main__":
