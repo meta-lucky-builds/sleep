@@ -64,6 +64,7 @@ class Decision:
     anchor_drift_after: Optional[float] = None
     paired_items: int = 0
     audit_exhausted: bool = False
+    drift_targets: int = 0  # Held-out anchor sequences measured before and after.
 
 
 def measure_gaps(
@@ -176,6 +177,31 @@ def decide(
             findings.append("gap_did_not_fall")
     if drift is not None and drift > cfg.max_anchor_drift:
         findings.append("anchor_drift")
+    if transactional:
+        decision.accepted = not findings
+        decision.reasons = findings or ["passed"]
+    else:
+        decision.reasons = ["non_transactional"] + findings
+    return decision
+
+
+def decide_drift(
+    drift: Optional[float],
+    cfg: CommitConfig,
+    transactional: bool,
+    audit_exhausted: bool = False,
+) -> Decision:
+    """The commit of an arm with no gap test (A2.1): only the night's increase in anchor drift decides.
+
+    Fails closed, like `decide`: a night with no drift measurement has not passed the test. The rejections then show
+    in the acceptance rate, which A1.7 reads. `transactional=False` always accepts, keeping the findings.
+    """
+    findings: list[str] = []
+    if drift is None:
+        findings.append("no_drift_data")
+    elif drift > cfg.max_anchor_drift:
+        findings.append("anchor_drift")
+    decision = Decision(accepted=True, anchor_drift=drift, audit_exhausted=audit_exhausted)
     if transactional:
         decision.accepted = not findings
         decision.reasons = findings or ["passed"]

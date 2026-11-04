@@ -177,6 +177,53 @@ def auroc(labels: Sequence[int], scores: Sequence[float]) -> Optional[float]:
     return float((ranks[y].sum() - positives * (positives + 1) / 2.0) / (positives * negatives))
 
 
+def bootstrap_auroc(
+    positive: Sequence[float],
+    negative: Sequence[float],
+    positive_units: Sequence[str],
+    negative_units: Sequence[str],
+    n_boot: int = 1000,
+    ci: float = 0.95,
+    seed: int = 0,
+) -> Optional[tuple[float, float]]:
+    """Percentile CI of the AUROC of positive vs. negative, resampling units with replacement.
+
+    A unit's rows all come or go together. So when a query appears in both classes it stays paired, and with episodes
+    as units, several queries about one fact count as one piece of evidence. None if nothing can be computed.
+    """
+    pos, neg = np.asarray(positive, dtype=np.float64), np.asarray(negative, dtype=np.float64)
+    if pos.size == 0 or neg.size == 0:
+        return None
+    units = sorted(set(positive_units) | set(negative_units))
+    index = {unit: i for i, unit in enumerate(units)}
+    pos_unit = np.array([index[u] for u in positive_units], dtype=np.int64)
+    neg_unit = np.array([index[u] for u in negative_units], dtype=np.int64)
+    rng = np.random.default_rng(seed)
+    draws = []
+    for _ in range(n_boot):
+        counts = np.bincount(rng.integers(0, len(units), size=len(units)), minlength=len(units))
+        sampled_pos = np.repeat(pos, counts[pos_unit])
+        sampled_neg = np.repeat(neg, counts[neg_unit])
+        scores = np.concatenate([sampled_pos, sampled_neg])
+        labels = np.concatenate([np.ones(sampled_pos.size, dtype=bool), np.zeros(sampled_neg.size, dtype=bool)])
+        area = auroc(labels, scores)
+        if area is not None:
+            draws.append(area)
+    if not draws:
+        return None
+    tail = (1.0 - ci) / 2.0
+    low, high = np.quantile(np.asarray(draws), [tail, 1.0 - tail])
+    return float(low), float(high)
+
+
+def pearson(xs: Sequence[float], ys: Sequence[float]) -> Optional[float]:
+    """Correlation, or None with fewer than two points or no variation on a side."""
+    x, y = np.asarray(xs, dtype=np.float64), np.asarray(ys, dtype=np.float64)
+    if x.size < 2 or np.ptp(x) == 0 or np.ptp(y) == 0:
+        return None
+    return float(np.corrcoef(x, y)[0, 1])
+
+
 def supported_difference(result: BootstrapResult, direction: int, margin: float) -> bool:
     """PREREG: the CI excludes zero in the predicted direction, and the point estimate meets the margin."""
     if not np.isfinite(result.ci_low) or not np.isfinite(result.ci_high):

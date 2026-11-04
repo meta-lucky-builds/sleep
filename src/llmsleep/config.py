@@ -90,6 +90,9 @@ class SelectConfig:
     # below, of the anchor pool, and the report says so through selection["count_source"].
     matched_selection: dict[str, dict] | None = None
     uniform_anchor_frac: float = 0.25
+    # Arms with `anchor_count="fixed"`: this share of the anchor pool in training, with no CHD and no paired arm.
+    # 0.5 because `anchor_null_q` above keeps about half of a pool that behaves like the null.
+    fixed_anchor_frac: float = 0.5
 
 
 @dataclass
@@ -139,6 +142,17 @@ class CommitConfig:
 
 
 @dataclass
+class FactAuditConfig:
+    """Sizes of the ledger-exempt log behind H8 (A2.2). Cost falls on the clock, never on a night's allowance."""
+
+    panel: int = 150  # Facts followed through every night from their first, chosen by hash of (seed, key).
+    controls: int = 40  # Never-taught facts about people who appear in no episode.
+    null_items: int = 32  # Gaps between two unrelated contexts: the threshold retirement would have used.
+    heldout_per_fact: int = 2  # Held-out generated queries measured per fact.
+    answer_tokens: int = 24  # For the closed-book answer.
+
+
+@dataclass
 class NightConfig:
     arm: ArmConfig
     model: ModelConfig = field(default_factory=ModelConfig)
@@ -150,6 +164,7 @@ class NightConfig:
     train: TrainConfig = field(default_factory=TrainConfig)
     compact: CompactConfig = field(default_factory=CompactConfig)
     commit: CommitConfig = field(default_factory=CommitConfig)
+    fact_audit: FactAuditConfig = field(default_factory=FactAuditConfig)
     retrieval_k: int = 2
 
     def to_dict(self) -> dict[str, Any]:

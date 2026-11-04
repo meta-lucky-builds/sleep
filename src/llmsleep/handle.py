@@ -156,6 +156,7 @@ class ModelHandle:
             raise ValueError("tokenizer has neither a pad nor an EOS token")
         self.pad_id: int = int(pad_id)
         self._newline_ids: Optional[set[int]] = None
+        self._content_mask: Optional[Tensor] = None
         self._grad_scaler: Any = None
         self.net.to(self.device)
         if not self.fp16 and any(p.dtype == torch.float16 for p in self.net.parameters()):
@@ -326,6 +327,35 @@ class ModelHandle:
             with torch.no_grad():
                 logits = self._forward(batch.input_ids, batch.attention_mask, batch.position_ids).logits
             yield list(range(start, stop)), gather_answer_logits(logits, batch.answer_mask).float()
+
+    @torch.no_grad()
+    def next_token_logits(self, prompts: Sequence[Sequence[int]]) -> Tensor:
+        """(N, V) float32 on CPU: the logits of the token after each prompt, under the active banks."""
+        results = []
+        for start in range(0, len(prompts), self.batch_size):
+            chunk = [list(p) for p in prompts[start : start + self.batch_size]]
+            batch = build_batch(chunk, [[] for _ in chunk], self.pad_id, "left").to(self.device)
+            self.ledger.charge(forward=int(batch.attention_mask.sum()))
+            logits = self._forward(batch.input_ids, batch.attention_mask, batch.position_ids).logits
+            results.append(logits[:, -1, :].float().cpu())  # Left padding: every row's last token is the last column.
+        return torch.cat(results) if results else torch.zeros(0, 0)
+
+    def content_token_mask(self, vocab_size: int) -> Tensor:
+        """(V,) bool: tokens whose text has a letter or a digit. Scanned once per process, as `_stop_ids` is."""
+        if self._content_mask is None or self._content_mask.numel() != vocab_size:
+            mask = torch.zeros(vocab_size, dtype=torch.bool)
+            for token in range(vocab_size):
+                try:
+                    text = self.tokenizer.decode([token], skip_special_tokens=True)
+                except (IndexError, KeyError, TypeError, ValueError):  # Model vocabularies may exceed the tokenizer's.
+                    continue
+                mask[token] = any(ch.isalnum() for ch in text)
+            self._content_mask = mask
+        return self._content_mask
+
+    def stop_token_ids(self, vocab_size: int) -> set[int]:
+        """What ends an answer in answer mode (A1.9)."""
+        return self._stop_ids(vocab_size, True)
 
     # ---- sampling -----------------------------------------------------------------------------------
 

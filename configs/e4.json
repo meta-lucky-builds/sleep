@@ -5,6 +5,6 @@
   "source_out": "runs/e3",
   "model_ids": ["Qwen/Qwen2.5-0.5B"],
   "world_seeds": [1001, 1002, 1003, 1004, 1005],
-  "arms": ["B3_replay", "S_full"],
+  "arms": ["B3_replay", "S_core"],
   "eval": {"max_new_tokens": 24, "batch_size": 32, "entrench_max": 200}
 }

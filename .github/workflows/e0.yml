@@ -4,8 +4,9 @@ name: e0
 on:
   # workflow_dispatch needs the file on the default branch, which stays untouched, so tags also trigger it:
   # e0-smoke-* for smoke checks, e0-run-* for E0. Tag runs read their models from configs/e0_models.txt.
+  # e0b-tune-* and e0b-confirm-* run E0b on base 0.5B, named in configs/e0b.json, and nothing else (A2.3).
   push:
-    tags: ["e0-smoke-*", "e0-run-*"]
+    tags: ["e0-smoke-*", "e0-run-*", "e0b-tune-*", "e0b-confirm-*"]
   workflow_dispatch:
     inputs:
       models:
@@ -22,6 +23,7 @@ permissions:
 
 jobs:
   plan:
+    if: ${{ !startsWith(github.ref_name, 'e0b-') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -81,4 +83,52 @@ jobs:
         with:
           name: e0-${{ env.TAG }}
           path: runs/e0/
+          if-no-files-found: warn
+
+  e0b:
+    if: ${{ startsWith(github.ref_name, 'e0b-tune-') || startsWith(github.ref_name, 'e0b-confirm-') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      HF_HOME: ${{ github.workspace }}/.hf-cache
+      TAG_NAME: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install CPU torch
+        run: pip install "torch>=2.3" --index-url https://download.pytorch.org/whl/cpu
+      - name: Install the package
+        run: pip install -e .
+      - uses: actions/cache@v4
+        with:
+          path: .hf-cache
+          key: hf-Qwen/Qwen2.5-0.5B-v1
+      - name: Run
+        # Confirm takes its candidate from a committed file, and the tuning output that file must agree with.
+        run: |
+          set -o pipefail
+          mkdir -p runs/e0b
+          case "$TAG_NAME" in
+            e0b-tune-*)
+              python experiments/run_e0b.py --config configs/e0b.json --out runs/e0b --device cpu 2>&1 | tee runs/e0b/log.txt
+              ;;
+            e0b-confirm-*)
+              test -f results/e0b/winner.txt || { echo "results/e0b/winner.txt is not committed"; exit 1; }
+              test -f results/e0b/e0b_tune.json || { echo "results/e0b/e0b_tune.json is not committed"; exit 1; }
+              if [ -f results/e0b/e0b_confirm.json ]; then echo "A2.3 allows one test, and one is committed"; exit 1; fi
+              python experiments/run_e0b.py --config configs/e0b.json --out runs/e0b --device cpu \
+                --confirm "$(tr -d '[:space:]' < results/e0b/winner.txt)" \
+                --tune-output results/e0b/e0b_tune.json 2>&1 | tee runs/e0b/log.txt
+              ;;
+          esac
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e0b-${{ github.ref_name }}
+          path: runs/e0b/
           if-no-files-found: warn

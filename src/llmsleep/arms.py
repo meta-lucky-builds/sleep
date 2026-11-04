@@ -7,6 +7,7 @@ _QUERY_SOURCES = ("none", "model", "template")
 _HARD_POOLS = ("none", "new", "all_real", "selected")
 _ANCHORS = ("none", "germline", "chain")
 _RETRIEVERS = ("none", "oracle", "bm25")
+_ANCHOR_COUNTS = ("matched", "fixed")
 
 
 @dataclass(frozen=True)
@@ -23,6 +24,15 @@ class ArmConfig:
 
     Anchors, in every arm that has them (A1.5), come from a pool naming nothing of tonight's episodes: queries
     generated on earlier nights, plus fresh model-generated queries over older episodes and the distractor pool.
+
+    S_core (A2.1) has no CHD anywhere: teacher KL on all usable generated queries, no gate, and uniform replay of
+    all real episodes, the same hard pool as B3, so that the comparison with B3 and B4 attributes to the teacher and
+    the pairs alone. Its anchor count is `SelectConfig.fixed_anchor_frac` of the pool and needs no other arm's
+    record. It commits on the anchor-drift test only. Gaps exist only in the ledger-exempt log, which drives nothing.
+
+    Since A2.1 the ablations S_oracleq, S_nokl, S_chain, S_nocompact, S_nopair, S_nocommit and S_bm25 derive from
+    S_core, one flag each, without the exempt log, which only S_core pays time for. S_noselect still derives from
+    S_full, since H3 needs that pair, and both run only if E0b restores selection.
     """
 
     name: str
@@ -36,13 +46,26 @@ class ArmConfig:
     write_gate: bool = False  # Do not store episodes the model already knows, by CHD.
     teacher_kl: bool = False  # KL to the open-book teacher on integrate queries.
     anchors: str = "none"  # Target when an anchor query touches nothing consolidated.
+    anchor_count: str = "matched"  # Selection off. matched: the paired arm's count, else a fallback. fixed: a set share.
     self_sampled_kl: bool = False  # KL to germline on text sampled from germline (Marek, A14).
     hard_pool: str = "none"  # Which real episodes feed the hard-label CE term.
     compact: bool = False  # SVT plus repair. Off: exact merge only.
     audit: bool = False  # Measure held-out gaps; drives pressure and retirement.
-    transactional: bool = False  # Audit may reject the night and roll back.
+    drift_commit: bool = False  # Test anchor drift only, paid from the audit stage. No gap is measured for it.
+    transactional: bool = False  # Audit or drift test may reject the night and roll back.
+    passive_audit: bool = False  # Exempt per-fact log of gap and correctness, before and after (H8). Drives nothing.
 
     def __post_init__(self) -> None:
+        if self.anchor_count not in _ANCHOR_COUNTS:
+            raise ValueError(f"anchor_count: {self.anchor_count!r}")
+        if self.anchor_count == "fixed" and self.selection:
+            raise ValueError("a fixed anchor count is for arms without selection")
+        if self.drift_commit and (self.audit or self.selection):
+            raise ValueError("the drift-only commit replaces the audit, which selection needs")
+        if self.drift_commit and self.anchors == "none":
+            raise ValueError("the drift test needs anchors")
+        if self.passive_audit and not self.train:
+            raise ValueError("the before-and-after log needs a night that trains")
         if self.query_source not in _QUERY_SOURCES:
             raise ValueError(f"query_source: {self.query_source!r}")
         if self.hard_pool not in _HARD_POOLS:
@@ -53,8 +76,8 @@ class ArmConfig:
             raise ValueError(f"retriever: {self.retriever!r}")
         if self.query_source != "none" and self.retriever == "none":
             raise ValueError("synthesised queries need a retriever to supply teacher context")
-        if self.transactional and not self.audit:
-            raise ValueError("transactional commit needs the audit")
+        if self.transactional and not (self.audit or self.drift_commit):
+            raise ValueError("transactional commit needs the audit or the drift test")
         if self.audit and self.query_source == "none":
             raise ValueError("the audit needs synthesised held-out queries")
         if (self.selection or self.write_gate or self.teacher_kl) and self.query_source == "none":
@@ -83,6 +106,21 @@ _S_FULL = ArmConfig(
     transactional=True,
 )
 
+_S_CORE = ArmConfig(
+    name="S_core",
+    train=True,
+    retriever="oracle",
+    query_source="model",
+    pair_contexts=True,
+    teacher_kl=True,
+    anchors="germline",
+    anchor_count="fixed",
+    hard_pool="all_real",
+    compact=True,
+    drift_commit=True,
+    transactional=True,
+)
+
 _B3 = ArmConfig(name="B3_replay", train=True, hard_pool="all_real")
 
 ARMS: dict[str, ArmConfig] = {
@@ -92,16 +130,17 @@ ARMS: dict[str, ArmConfig] = {
     "B3_replay": _B3,
     "B3_pairs": replace(_B3, name="B3_pairs", replay_pairs=True),
     "B4_replay_kl": replace(_B3, name="B4_replay_kl", self_sampled_kl=True),
+    "S_core": replace(_S_CORE, passive_audit=True),
     "S_full": _S_FULL,
-    "S_oracleq": replace(_S_FULL, name="S_oracleq", query_source="template"),
     "S_noselect": replace(_S_FULL, name="S_noselect", selection=False, write_gate=False),
-    "S_nokl": replace(_S_FULL, name="S_nokl", teacher_kl=False),
-    "S_chain": replace(_S_FULL, name="S_chain", anchors="chain"),
-    "S_nocompact": replace(_S_FULL, name="S_nocompact", compact=False),
-    "S_nopair": replace(_S_FULL, name="S_nopair", pair_contexts=False),
-    # Gaps are still measured, so pressure and retirement match S_full; only the rollback is ablated.
-    "S_nocommit": replace(_S_FULL, name="S_nocommit", transactional=False),
-    "S_bm25": replace(_S_FULL, name="S_bm25", retriever="bm25"),
+    "S_oracleq": replace(_S_CORE, name="S_oracleq", query_source="template"),
+    "S_nokl": replace(_S_CORE, name="S_nokl", teacher_kl=False),
+    "S_chain": replace(_S_CORE, name="S_chain", anchors="chain"),
+    "S_nocompact": replace(_S_CORE, name="S_nocompact", compact=False),
+    "S_nopair": replace(_S_CORE, name="S_nopair", pair_contexts=False),
+    # The drift test still runs and is reported; only the rollback is ablated.
+    "S_nocommit": replace(_S_CORE, name="S_nocommit", transactional=False),
+    "S_bm25": replace(_S_CORE, name="S_bm25", retriever="bm25"),
 }
 
 

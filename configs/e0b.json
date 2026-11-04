@@ -1,0 +1,22 @@
+{
+  "experiment": "E0b",
+  "seed_role": "dev",
+  "model_id": "Qwen/Qwen2.5-0.5B",
+  "world_seeds": [8, 9],
+  "world": {"n_persons": 45, "n_orgs": 8, "n_cities": 8, "n_regions": 6, "nights": 1, "supersession_rate": 0.0, "n_distractors": 80, "n_control_persons": 4, "n_entrench": 0},
+  "fp16": false,
+  "batch_size": 16,
+  "k": 4,
+  "chd_tokens": 16,
+  "chd_mix_k": 2,
+  "chd_mix_m": 4,
+  "max_skip": 2,
+  "queries": {"per_episode": 3, "model_samples": 2, "model_max_new_tokens": 64, "temperature": 0.8},
+  "max_episodes": 250,
+  "quota": {"positive": 150, "third": 60},
+  "template_quota": {"positive": 20, "third": 20},
+  "samples_per_class": 15,
+  "n_boot": 1000,
+  "cost_cap": 1.5,
+  "min_class_n": 30
+}

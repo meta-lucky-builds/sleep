@@ -117,6 +117,28 @@ Reason: independent code review (`docs/REVIEW_1.md`) found that the design tilte
 
 **A1.13 Compaction (M6).** Retention and acquisition are reported by fact age. E5 includes hard truncation as well as soft thresholding.
 
+## Amendment 2 (2026-11-04, after E0 on 0.5B; written before E0b or any training)
+
+E0 is pilot data on dev seed 7 (`docs/results/E0.md`). Base 0.5B passed H0. **H1 failed on both 0.5B models, at E0 settings and deployed settings, so the kill rule applies.**
+
+**A2.1 Rule applied.** CHD-based selection and the write gate leave the main arms for E2 and E3. H3 is withdrawn unless A2.3 restores it. New arm `S_core`: teacher KL on all generated queries with no gate, anchors per A1.5, pair contexts, compaction, and commit on the drift test only. **`S_core` replaces `S_full` in H2, H4, H5, H7 and the headline.** `S_full` runs only if restored. Gap and audit values are still measured and logged, exempt from the ledger, and drive nothing.
+
+**A2.2 H1 is split, post hoc and labelled so.** H1 lumped two questions:
+- **H1a (relevance):** does the signal tell whether this episode bears on this query? Selection needs this. Failed.
+- **H1b (state):** does it tell whether the model already knows the answer? Write gate, audit, pressure and retirement need this. Between-entity AUROC was 0.997 (base), 0.995 (Instruct).
+
+H1b's result was not predicted separately. Known real entities versus fictional ones is confounded by familiarity with the names. So it earns no control role yet. The clean test is **H8, within fact, before vs. after training**, measured passively in E2 and E3. Only if H8 passes may audit or retirement drive anything, and only in a later, separately pre-registered run.
+
+**A2.3 E0b: replacement signals for H1a. The only route back for selection.**
+Observed: own-episode positives in the deployed test include generated questions the episode doesn't answer, so that test mislabels some positives. And replacing no-context with a single distractor barely reduced the offset (1.08 vs. 1.26 nats), so the noise comes from context *content*.
+- Candidates, all oracle-free: (a) CHD per token, single distractor, the incumbent; (b) `CHD_mix`, KL to the mixture over M = 4 distractors; (c) grounding: rate at which e-context answers contain a content word from the episode that is absent from the query, minus the same rate under distractors; (d) agreement: modal-answer agreement across samples under e, minus under distractors; (e) entropy drop of the answer's first token, d minus e.
+- Labels: positive = query with its own episode, where the query's answer in the world is the episode's stated value, labelled by the world's facts (benchmark only); negative = same query with an unrelated episode. Questions the episode doesn't answer are excluded from positives and reported as a separate third class, because selection must also reject them.
+- Tuning on dev seed 8; the single best candidate at equal ledger cost is then tested once on dev seed 9. No other candidate is tested on seed 9.
+- **Pass: AUROC at least 0.85 on seed 9, and at least 0.75 for answer-bearing vs. non-answer-bearing own-episode queries, at deployed cost.** Fail: selection is abandoned for this project. Confirmatory seeds are untouched.
+- Base 0.5B only. Its result does not rescue H1 as originally stated; it adds a differently specified signal.
+
+**A2.4 Model.** H0's rule picks the smallest passing model: base 0.5B, unless 1.5B changes the reading. Instruct 0.5B's two-hop 0.20 vs. base 0.85 is unexplained; refusals under the chat template are a possible cause, unverified.
+
 ## Threats accepted
 
 Synthetic facts are not real experience; templated eval could be easier than real use. Results on 1 to 3B models may not transfer up or down (T2 §9). Ten nights is short of deployment timescales. The world generator was written by the same author as the method, so eval templates are fixed and reviewed before any arm runs.

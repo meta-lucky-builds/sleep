@@ -1,21 +1,31 @@
 """Apply the PREREG decision rule, as amended: `python experiments/analyze.py --results DIR [--json FILE]`.
 
 Readings this script had to make of PREREG; each is stated here so it can be argued with:
+- A2.1: `S_core` replaces `S_full` in H2, H4, H5, H7 and the headline. The amendment does not name H6 or H8, whose arm
+  was S_full. Since S_full no longer runs by default, both are read on `S_core` too.
+- H3 is withdrawn (A2.1), and leaves the Holm family, unless both S_full and S_noselect have results, which only
+  happens if E0b restores selection. S_full is then reported beside the headline, and replaces nothing.
 - Margin: 3 points applies to accuracies, measured on lift over the permuted-gold control (A1.3). `drift_generic`
   has no margin (units are nats), only the CI rule. H6 compares two follow rates, which are their own control.
 - H2 (A1.2) is three members of the Holm family: `S_nopair` vs `B4_replay_kl` on `acq_reverse`, the same on
-  `acq_alias`, and `S_full` vs `B3_pairs` on `acq_twohop`. Each has its own `ret_real` guard. H2 as a whole is
+  `acq_alias`, and `S_core` vs `B3_pairs` on `acq_twohop`. Each has its own `ret_real` guard. H2 as a whole is
   supported only if all three are.
-- Holm family per model size: the three H2 members, H3, H4 (drift difference), H5 (the worst non-inferiority p),
-  H6 (the larger p of its two arms), H7. Anything missing counts as p = 1 (A1.7). A hypothesis is supported only if
-  its own rule holds AND its Holm-adjusted p is below 0.05.
-- H5 "within 3 points": the whole 95% CI of S_full minus S_nocompact lies above -3 points, on each of acq_direct,
+- Holm family per model size: the three H2 members, H3 if restored, H4 (drift difference), H5 (the worst
+  non-inferiority p), H6 (the larger p of its two arms), H7. Anything missing counts as p = 1 (A1.7). A hypothesis is
+  supported only if its own rule holds AND its Holm-adjusted p is below 0.05.
+- H5 "within 3 points": the whole 95% CI of S_core minus S_nocompact lies above -3 points, on each of acq_direct,
   acq_reverse, acq_alias, acq_twohop and ret_real. "Bounded" delta_rank: final rank at most 1.25 times the mid-run
   rank, in every seed.
-- H4 "widening": the per-seed slope over nights of (S_chain drift - S_full drift) has a CI above zero.
-- H6 is within-arm: consolidated minus matched control, predicted negative, 3-point margin, both B3 and S_full.
-- H8 is "not measured" with fewer than MIN_RETIRED retirements over all seeds: otherwise its second clause would pass
-  on no data (review M7). The minimum is this script's choice, not PREREG's.
+- H4 "widening": the per-seed slope over nights of (S_chain drift - S_core drift) has a CI above zero.
+- H6 is within-arm: consolidated minus matched control, predicted negative, 3-point margin, both B3 and S_core.
+- H8 (A2.2) reads the exempt per-fact log, in which nothing retires, so its second clause is counterfactual: a fact would
+  retire after `retire_nights` accepted nights in a row with its probe gap at or below that night's median null gap,
+  and it counts as false if the fact is wrong at the final night. H8 is supported only with all of: mean AUROC at least
+  0.75 for the held-out gap against correctness at the final night (PREREG's clause); mean AUROC at least 0.75 for the
+  fall in gap among facts wrong before a night, gained vs. not gained (A2.2's within-fact test; carrying the threshold
+  over is this script's choice); and a false rate under 0.10. It is "not measured" with fewer than MIN_RETIRED such facts
+  over all seeds: otherwise the last clause would pass on no data (review M7), so a one-night world such as E2's can
+  report the AUROCs but no verdict. The minimum is this script's choice, not PREREG's.
 - H9 is not measured by the current world: conflicts always arrive on a later night.
 
 A run is labelled exploratory when any of these hold: fewer than 5 common seeds; a seed not marked confirmatory; a
@@ -37,14 +47,18 @@ if str(_ROOT / "src") not in sys.path:
 
 from llmsleep.stats import (  # noqa: E402
     BootstrapResult,
+    auroc,
     holm,
     non_inferior,
     paired_cluster_bootstrap,
+    pearson,
     seed_bootstrap,
     slope,
     supported_difference,
 )
 
+HEADLINE_ARM = "S_core"  # A2.1.
+RESTORED_ARMS = ("S_full", "S_noselect")  # Run only if E0b restores selection.
 MIN_CONFIRMATORY_SEEDS = 5
 MARGIN = 0.03
 ALPHA = 0.05
@@ -286,7 +300,7 @@ def h2_member(group: Group, metric: str, a: str, b: str, n_boot: int, seed: int)
 
 
 def h4(group: Group, n_boot: int, seed: int) -> dict:
-    a, b = "S_full", "S_chain"
+    a, b = HEADLINE_ARM, "S_chain"
     drift = _diff(group, "drift_generic", a, b, n_boot, seed)
     retention = _diff(group, "ret_real_lift", a, b, n_boot, seed)
     if drift is None or retention is None:
@@ -319,7 +333,7 @@ def h4(group: Group, n_boot: int, seed: int) -> dict:
 
 
 def h5(group: Group, n_boot: int, seed: int) -> dict:
-    a, b = "S_full", "S_nocompact"
+    a, b = HEADLINE_ARM, "S_nocompact"
     results = {
         metric: _diff(group, f"{metric}_lift", a, b, n_boot, seed, null=-MARGIN)
         for metric in ("acq_direct", "acq_reverse", "acq_alias", "acq_twohop", "ret_real")
@@ -349,7 +363,7 @@ def h5(group: Group, n_boot: int, seed: int) -> dict:
 
 
 def h6(group: Group, n_boot: int, seed: int) -> dict:
-    arms = ("B3_replay", "S_full")
+    arms = ("B3_replay", HEADLINE_ARM)
     results = {}
     for arm in arms:
         fact, control = group.clusters(arm, "entrench_follow_fact"), group.clusters(arm, "entrench_follow_control")
@@ -366,42 +380,183 @@ def h6(group: Group, n_boot: int, seed: int) -> dict:
     )
 
 
+def _fact_rows(record: dict) -> list[dict]:
+    return (record.get("report") or {}).get("fact_audit", {}).get("items", [])
+
+
+def _gap_auroc(rows: Sequence[dict], gap: str, correct: str) -> Optional[float]:
+    """Does a low gap go with a right answer? The score is the negated gap, as in the nightly metric."""
+    pairs = [(r[gap], r[correct]) for r in rows if r.get(gap) is not None and r.get(correct) is not None]
+    return auroc([int(c) for _, c in pairs], [-g for g, _ in pairs]) if pairs else None
+
+
+def _changes(rows: Sequence[dict], gap_before: str = "gap_before", gap_after: str = "gap_after") -> list[dict]:
+    return [
+        {
+            "before": r[gap_before],
+            "gap_change": r[gap_after] - r[gap_before],
+            "correct_change": int(r["correct_after"]) - int(r["correct_before"]),
+            "wrong_before": not r["correct_before"],
+            "gained": bool(r["correct_after"]),
+        }
+        for r in rows
+        if r.get(gap_before) is not None and r.get(gap_after) is not None
+    ]
+
+
+def _within_fact(changes: Sequence[dict]) -> Optional[float]:
+    """Among facts wrong before: does the gap fall further for those now right? Fact by fact, on identical queries."""
+    wrong = [c for c in changes if c["wrong_before"]]
+    return auroc([int(c["gained"]) for c in wrong], [-c["gap_change"] for c in wrong]) if wrong else None
+
+
+def _line(changes: Sequence[dict]) -> Optional[tuple[float, float]]:
+    """(intercept, slope) of gap change on the gap before. On controls, the slope is regression to the mean."""
+    xs, ys = [c["before"] for c in changes], [c["gap_change"] for c in changes]
+    b = slope(xs, ys)
+    if b != b:
+        return None
+    return sum(ys) / len(ys) - b * sum(xs) / len(xs), b
+
+
+def fact_audit_night(rows: Sequence[dict]) -> dict:
+    """One night of the log. Pure. What H8 asks, with the controls beside it.
+
+    `taught_net_of_control` is the taught facts' mean gap change minus what the controls' regression predicts at each
+    fact's own starting gap: the fall left over after regression to the mean and the night's general movement.
+    """
+    taught = [r for r in rows if r["role"] in ("tonight", "older")]
+    tonight = [r for r in rows if r["role"] == "tonight"]
+    controls = [r for r in rows if r["role"] == "control"]
+    changes, control_changes = _changes(tonight), _changes(controls)
+    line = _line(control_changes)
+    net = (
+        _mean([c["gap_change"] - (line[0] + line[1] * c["before"]) for c in changes]) if line is not None and changes else None
+    )
+    taught_line = _line(changes)
+    return {
+        "taught": len(taught),
+        "tonight": len(tonight),
+        "controls": len(controls),
+        "auroc_probe": _gap_auroc(taught, "gap_after", "correct_after"),
+        "auroc_heldout": _gap_auroc(taught, "heldout_after", "correct_after"),
+        "auroc_probe_before": _gap_auroc(tonight, "gap_before", "correct_before"),
+        "within_fact_auroc": _within_fact(changes),
+        "within_fact_auroc_heldout": _within_fact(_changes(tonight, "heldout_before", "heldout_after")),
+        "gap_vs_correct_change": pearson([c["gap_change"] for c in changes], [c["correct_change"] for c in changes]),
+        "mean_gap_change": _mean([c["gap_change"] for c in changes]),
+        "control_mean_gap_change": _mean([c["gap_change"] for c in control_changes]),
+        "mean_correct_before": _mean([float(c["wrong_before"] is False) for c in changes]),
+        "mean_correct_after": _mean([float(r["correct_after"]) for r in tonight]),
+        "control_correct_before": _mean([float(r["correct_before"]) for r in controls]),
+        "control_correct_after": _mean([float(r["correct_after"]) for r in controls]),
+        "regression_slope": taught_line[1] if taught_line is not None else None,
+        "control_regression_slope": line[1] if line is not None else None,
+        "taught_net_of_control": net,
+    }
+
+
+def would_retire(records: Sequence[dict]) -> dict[str, bool]:
+    """One seed's nights, in order. {fact: wrong at the final night}, for facts retirement would have taken by then.
+
+    Counts as `update_episodes` does: a rejected night neither counts nor resets, and a high gap resets.
+    """
+    low: dict[str, int] = {}
+    retired: set[str] = set()
+    last: dict[str, bool] = {}
+    for record in records:
+        audit = (record.get("report") or {}).get("fact_audit", {})
+        null = sorted(audit.get("null_gaps", []))
+        threshold = null[len(null) // 2] if null else None
+        for row in audit.get("items", []):
+            if row["role"] == "control":
+                continue
+            last[row["key"]] = bool(row["correct_after"])
+            if threshold is None or row.get("gap_after") is None or not audit.get("accepted"):
+                continue
+            low[row["key"]] = low.get(row["key"], 0) + 1 if row["gap_after"] <= threshold else 0
+            if low[row["key"]] >= audit.get("retire_nights", 3):
+                retired.add(row["key"])
+    return {key: not last[key] for key in retired}
+
+
+def fact_audit_table(group: Group, arm: str = HEADLINE_ARM) -> list[dict]:
+    rows = []
+    for seed in sorted(group.seeds(arm)):
+        for night in sorted(group.cells[arm][seed]):
+            items = _fact_rows(group.cells[arm][seed][night])
+            if items:
+                rows.append({"seed": seed, "night": night, **fact_audit_night(items)})
+    return rows
+
+
 def h8(group: Group) -> dict:
-    """Not in the Holm family: fixed thresholds on AUROC and on the false-retirement rate."""
-    arm = "S_full"
-    aurocs, false_rates, retired = [], [], 0
+    """Not in the Holm family: fixed thresholds. See the module docstring for the reading."""
+    arm = HEADLINE_ARM
+    heldout, probe, within, false_flags = [], [], [], []
     for s in sorted(group.seeds(arm)):
-        metrics = group.final(arm, s)["metrics"]
-        if metrics.get("audit_auroc") is not None:
-            aurocs.append(metrics["audit_auroc"])
-        if metrics.get("false_retirement") is not None:
-            false_rates.append(metrics["false_retirement"])
-        retired += metrics.get("retired") or 0
-    if not aurocs:
+        nights = [group.cells[arm][s][n] for n in sorted(group.cells[arm][s])]
+        if not any(_fact_rows(r) for r in nights):
+            continue
+        final = [r for r in _fact_rows(nights[-1]) if r["role"] in ("tonight", "older")]
+        for values, gap in ((heldout, "heldout_after"), (probe, "gap_after")):
+            area = _gap_auroc(final, gap, "correct_after")
+            if area is not None:
+                values.append(area)
+        # Nights the commit kept: on a rejected one, the weights did not change and neither did the fact.
+        changes = []
+        for record in nights:
+            if (record.get("report") or {}).get("fact_audit", {}).get("accepted"):
+                changes += _changes([r for r in _fact_rows(record) if r["role"] == "tonight"])
+        area = _within_fact(changes)
+        if area is not None:
+            within.append(area)
+        false_flags += list(would_retire(nights).values())
+    if not probe and not heldout:
         return _entry("missing", [arm], group, None)
-    mean_auroc = sum(aurocs) / len(aurocs)
-    mean_false = sum(false_rates) / len(false_rates) if false_rates else None
-    extra = {"mean_auroc": mean_auroc, "mean_false_retirement": mean_false, "retired": retired}
-    if retired < MIN_RETIRED:
-        return _entry("not measured", [arm], group, None, note=f"only {retired} retirements; {MIN_RETIRED} needed", **extra)
-    ok = mean_auroc >= 0.75 and mean_false is not None and mean_false < 0.10
+    mean_heldout, mean_within = _mean(heldout), _mean(within)
+    mean_false = _mean([float(flag) for flag in false_flags])
+    extra = {
+        "mean_auroc_heldout": mean_heldout,
+        "mean_auroc_probe": _mean(probe),
+        "mean_within_fact_auroc": mean_within,
+        "counterfactual_false_retirement": mean_false,
+        "counterfactual_retired": len(false_flags),
+    }
+    if len(false_flags) < MIN_RETIRED:
+        note = f"only {len(false_flags)} facts would have retired; {MIN_RETIRED} needed"
+        return _entry("not measured", [arm], group, None, note=note, **extra)
+    if mean_heldout is None or mean_within is None:
+        return _entry("not measured", [arm], group, None, note="no AUROC could be computed", **extra)
+    ok = mean_heldout >= 0.75 and mean_within >= 0.75 and mean_false is not None and mean_false < 0.10
     return _entry("supported" if ok else "not supported", [arm], group, None, **extra)
 
 
 def evaluate_hypotheses(group: Group, n_boot: int = 2000, seed: int = 0) -> dict:
+    restored = all(group.seeds(arm) for arm in RESTORED_ARMS)
     results = {
         "H2_reverse": h2_member(group, "acq_reverse", "S_nopair", "B4_replay_kl", n_boot, seed),
         "H2_alias": h2_member(group, "acq_alias", "S_nopair", "B4_replay_kl", n_boot, seed),
-        "H2_twohop": h2_member(group, "acq_twohop", "S_full", "B3_pairs", n_boot, seed),
-        "H3": _difference_hypothesis(group, "acq_implied", "S_full", "S_noselect", n_boot, seed),
+        "H2_twohop": h2_member(group, "acq_twohop", HEADLINE_ARM, "B3_pairs", n_boot, seed),
+        "H3": _difference_hypothesis(group, "acq_implied", "S_full", "S_noselect", n_boot, seed)
+        if restored
+        else {
+            "status": "withdrawn",
+            "label": "exploratory",
+            "reasons": ["A2.1: withdrawn unless E0b restores selection"],
+            "p": None,
+            "arms": list(RESTORED_ARMS),
+        },
         "H4": h4(group, n_boot, seed),
         "H5": h5(group, n_boot, seed),
         "H6": h6(group, n_boot, seed),
-        "H7": _difference_hypothesis(group, "acq_twohop", "S_full", "S_nopair", n_boot, seed),
+        "H7": _difference_hypothesis(group, "acq_twohop", HEADLINE_ARM, "S_nopair", n_boot, seed),
     }
-    # A1.7: a missing member still takes a slot, so analysing a partial run cannot look stronger.
-    adjusted = holm({name: (results[name]["p"] if results[name]["p"] is not None else 1.0) for name in HOLM_FAMILY})
-    for name in HOLM_FAMILY:
+    # A1.7: a missing member still takes a slot, so analysing a partial run cannot look stronger. A withdrawn one
+    # is not missing: it was removed by rule, before any of this data existed.
+    family = [name for name in HOLM_FAMILY if restored or name != "H3"]
+    adjusted = holm({name: (results[name]["p"] if results[name]["p"] is not None else 1.0) for name in family})
+    for name in family:
         entry = results[name]
         entry["p_holm"] = adjusted[name]
         if entry["status"] == "supported" and adjusted[name] >= ALPHA:
@@ -422,17 +577,17 @@ def evaluate_hypotheses(group: Group, n_boot: int = 2000, seed: int = 0) -> dict
     return results
 
 
-def main_comparison(group: Group, n_boot: int, seed: int) -> dict:
-    """A1.1: the headline is S_full vs B3_pairs. B3_replay, the original headline, is reported beside it."""
+def main_comparison(group: Group, n_boot: int, seed: int, arm: str = HEADLINE_ARM) -> dict:
+    """A1.1, A2.1: the headline is S_core vs B3_pairs. B3_replay, the original headline, is reported beside it."""
     out = {}
     for baseline in ("B3_pairs", "B3_replay"):
         differences = {}
         for metric in ("acq_direct", "acq_reverse", "acq_alias", "acq_twohop", "supersede", "ret_real"):
-            differences[metric] = _result(_diff(group, f"{metric}_lift", "S_full", baseline, n_boot, seed))
+            differences[metric] = _result(_diff(group, f"{metric}_lift", arm, baseline, n_boot, seed))
         for metric in ("stale", "taught_value_bleed", "false_recall_any_specific", "drift_generic"):
-            differences[metric] = _result(_diff(group, metric, "S_full", baseline, n_boot, seed))
-        label, reasons = run_label(group, ("S_full", baseline), _common_seeds(group, ("S_full", baseline)))
-        out[baseline] = {"label": label, "reasons": reasons, "differences_S_full_minus_baseline": differences}
+            differences[metric] = _result(_diff(group, metric, arm, baseline, n_boot, seed))
+        label, reasons = run_label(group, (arm, baseline), _common_seeds(group, (arm, baseline)))
+        out[baseline] = {"label": label, "reasons": reasons, "arm": arm, "differences_minus_baseline": differences}
     return out
 
 
@@ -517,7 +672,9 @@ def analyze(root: Path, n_boot: int = 2000, seed: int = 0) -> dict:
         group = Group(rows)
         out[f"{model_id}/{variant}"] = {
             "main": main_comparison(group, n_boot, seed),
+            "restored": main_comparison(group, n_boot, seed, "S_full") if group.seeds("S_full") else None,
             "hypotheses": evaluate_hypotheses(group, n_boot, seed),
+            "fact_audit": fact_audit_table(group),
             "table": arm_table(group),
             "by_age": age_table(group),
             "validity": [validity_row(group, arm) for arm in sorted(group.cells)],
@@ -537,14 +694,15 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     summary = analyze(Path(args.results), args.n_boot, args.seed)
     for key, entry in summary.items():
         print(f"\n=== {key} ===")
-        for baseline, part in entry["main"].items():
-            reasons = f" ({'; '.join(part['reasons'])})" if part["reasons"] else ""
-            print(f"S_full versus {baseline} [{part['label']}]{reasons}")
-            for metric, result in part["differences_S_full_minus_baseline"].items():
-                if result is None:
-                    print(f"  {metric}: not available")
-                else:
-                    print(f"  {metric}: {result['estimate']:+.3f} CI[{result['ci_low']:+.3f}, {result['ci_high']:+.3f}] seeds={result['n_seeds']}")
+        for comparison in (entry["main"], entry["restored"] or {}):
+            for baseline, part in comparison.items():
+                reasons = f" ({'; '.join(part['reasons'])})" if part["reasons"] else ""
+                print(f"{part['arm']} versus {baseline} [{part['label']}]{reasons}")
+                for metric, result in part["differences_minus_baseline"].items():
+                    if result is None:
+                        print(f"  {metric}: not available")
+                    else:
+                        print(f"  {metric}: {result['estimate']:+.3f} CI[{result['ci_low']:+.3f}, {result['ci_high']:+.3f}] seeds={result['n_seeds']}")
         print("\nValidity (acceptance, unscored fraction, integrate count, budget spent)")
         print(format_table(entry["validity"]))
         print("\nAnchor drift increase per night, nats per token (E1 sets max_anchor_drift from this)")
@@ -552,6 +710,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         print("\nHypotheses")
         for name, hypothesis in entry["hypotheses"].items():
             print("  " + format_hypothesis(name, hypothesis))
+        print(f"\nH8's log for {HEADLINE_ARM}, per seed and night: gap vs. correctness, and change against the controls")
+        print(format_table(entry["fact_audit"]))
         print("\nArms at the final night (means over seeds)")
         print(format_table(entry["table"]))
         print("\nDirect accuracy by fact age, at the final night")

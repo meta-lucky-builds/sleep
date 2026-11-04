@@ -62,6 +62,7 @@ PREREG_ARMS = {
     "B3_replay",
     "B3_pairs",
     "B4_replay_kl",
+    "S_core",
     "S_full",
     "S_oracleq",
     "S_noselect",
@@ -80,9 +81,14 @@ def _probe_logits(state: State) -> torch.Tensor:
     return state.handle.net(input_ids=ids).logits.detach().clone()
 
 
-def _select_all_config(arm_name: str = "S_oracleq") -> NightConfig:
+def _oracle_full() -> ArmConfig:
+    """S_full's selection and audit paths over oracle templates, since a tiny model's own questions rarely parse."""
+    return replace(get_arm("S_full"), query_source="template")
+
+
+def _select_all_config() -> NightConfig:
     """Templates, no CHD filter: guarantees integrate targets and a real training path on a tiny model."""
-    return small_config(replace(get_arm(arm_name), selection=False, write_gate=False))
+    return small_config(replace(_oracle_full(), selection=False, write_gate=False))
 
 
 # ---- arms and invariant 5 --------------------------------------------------------------------------
@@ -105,14 +111,41 @@ def test_arm_flags_match_the_prereg_table():
     full = get_arm("S_full")
     assert full.query_source == "model" and full.selection and full.teacher_kl and full.anchors == "germline"
     assert full.pair_contexts and full.compact and full.transactional and full.retriever == "oracle"
+    core = get_arm("S_core")
+    assert core.query_source == "model" and core.teacher_kl and core.anchors == "germline" and core.pair_contexts
+    assert core.compact and core.drift_commit and core.transactional and core.passive_audit
+    assert not core.selection and not core.write_gate and not core.audit  # A2.1: nothing here reads CHD.
+    assert core.hard_pool == get_arm("B3_replay").hard_pool and core.anchor_count == "fixed"
     assert get_arm("S_oracleq").query_source == "template"
     assert not get_arm("S_noselect").selection and get_arm("S_noselect").teacher_kl
-    assert get_arm("S_nokl").selection and not get_arm("S_nokl").teacher_kl
+    assert not get_arm("S_nokl").teacher_kl
     assert get_arm("S_chain").anchors == "chain"
     assert not get_arm("S_nocompact").compact
     assert not get_arm("S_nopair").pair_contexts
-    assert not get_arm("S_nocommit").transactional and get_arm("S_nocommit").audit
+    assert not get_arm("S_nocommit").transactional and get_arm("S_nocommit").drift_commit
     assert get_arm("S_bm25").retriever == "bm25"
+
+
+@pytest.mark.parametrize(
+    "arm_name, changed",
+    [
+        ("S_oracleq", {"query_source": "template"}),
+        ("S_nokl", {"teacher_kl": False}),
+        ("S_chain", {"anchors": "chain"}),
+        ("S_nocompact", {"compact": False}),
+        ("S_nopair", {"pair_contexts": False}),
+        ("S_nocommit", {"transactional": False}),
+        ("S_bm25", {"retriever": "bm25"}),
+    ],
+)
+def test_each_ablation_is_s_core_with_one_flag_changed(arm_name, changed):
+    """So that a difference from S_core attributes to that flag. The exempt log costs time only, so S_core alone has it."""
+    expected = replace(get_arm("S_core"), name=arm_name, passive_audit=False, **changed)
+    assert get_arm(arm_name) == expected
+
+
+def test_noselect_stays_paired_with_s_full():
+    assert get_arm("S_noselect") == replace(get_arm("S_full"), name="S_noselect", selection=False, write_gate=False)
 
 
 def test_no_arm_names_outside_arms_py():
@@ -135,6 +168,16 @@ def test_invalid_arm_flags_are_rejected():
         ArmConfig(name="x", query_source="model")
     with pytest.raises(ValueError):
         ArmConfig(name="x", train=True)
+    with pytest.raises(ValueError):
+        ArmConfig(name="x", anchor_count="wat")
+    with pytest.raises(ValueError):
+        replace(get_arm("S_full"), anchor_count="fixed")
+    with pytest.raises(ValueError):
+        replace(get_arm("S_core"), audit=True)
+    with pytest.raises(ValueError):
+        replace(get_arm("S_core"), anchors="none")
+    with pytest.raises(ValueError):
+        ArmConfig(name="x", passive_audit=True)
 
 
 def test_config_round_trips_and_hash_is_stable():
@@ -277,7 +320,7 @@ def _anchor_queries(monkeypatch) -> list:
 @pytest.mark.parametrize("selection", [True, False])
 def test_anchors_never_name_tonights_entities(selection, tokenizer, world, monkeypatch):
     seen = _anchor_queries(monkeypatch)
-    arm = replace(get_arm("S_oracleq"), selection=selection, write_gate=selection)
+    arm = replace(_oracle_full(), selection=selection, write_gate=selection)
     cfg = small_config(arm)
     cfg.select.matched_selection = None if selection else {"1": {"train": {"anchor": 3}, "heldout": {"anchor": 1}}}
     cfg.select.anchor_null_q = 1.0  # Everything at or below the null's top: most of the pool, on a noise model.
@@ -345,7 +388,7 @@ def test_anchor_pool_generates_over_older_episodes_and_the_distractor_pool(monke
 
 def test_drift_is_tested_as_the_nights_increase_not_the_cumulative_level(tokenizer, world):
     """C1: a big earlier delta must not freeze later nights. With lr 0 the increase is exactly zero."""
-    arm = replace(get_arm("S_oracleq"), selection=False, write_gate=False, compact=False)
+    arm = replace(_oracle_full(), selection=False, write_gate=False, compact=False)
     cfg = small_config(arm)
     cfg.commit = CommitConfig(min_gap_drop=-1e9, max_anchor_drift=1e-6)
     cfg.select.matched_selection = {"1": {"train": {"anchor": 1}, "heldout": {"anchor": 1}}}
@@ -397,7 +440,7 @@ def test_audit_flags_with_an_independent_seed_and_measures_a_control(tokenizer, 
         return original(handle, items, seed, night, k, m, purpose)
 
     monkeypatch.setattr(night_module, "measure_gaps", recording)
-    cfg = small_config(get_arm("S_oracleq"))
+    cfg = small_config(_oracle_full())
     run_night(fresh_gpt2_state(cfg, world, tokenizer), cfg)
     assert calls[0][0] == "audit_flag"
     audited = [items for purpose, items in calls if purpose == "audit"]
@@ -465,7 +508,7 @@ def test_scoring_mixes_singles_and_pairs_and_reports_unscored(tokenizer, monkeyp
         return original(handle, items, *args, **kwargs)
 
     monkeypatch.setattr(night_module, "chd_safe", recording)
-    cfg = small_config(get_arm("S_oracleq"))
+    cfg = small_config(_oracle_full())
     cfg.queries.per_episode = 8
     report = run_night(fresh_gpt2_state(cfg, ManyPairQueries(), tokenizer), cfg)
     order = [query for query, _, _ in seen[0]]
@@ -478,7 +521,7 @@ def test_scoring_mixes_singles_and_pairs_and_reports_unscored(tokenizer, monkeyp
 
 
 def test_unused_stage_tokens_go_to_training(tokenizer, world):
-    cfg = small_config(replace(get_arm("S_oracleq"), selection=False, write_gate=False), night_tokens=40_000)
+    cfg = small_config(replace(_oracle_full(), selection=False, write_gate=False), night_tokens=40_000)
     cfg.train = TrainConfig(lr=1e-3, hard_batch=2, kl_batch=2, anchor_batch=2)  # max_steps None.
     report = run_night(fresh_gpt2_state(cfg, world, tokenizer), cfg)
     assert report.ledger["unspent"] == cfg.budget.night_tokens - report.ledger["spent"]
@@ -539,7 +582,7 @@ def test_write_gate_defers_rather_than_drops_and_reports_the_rate(tokenizer, wor
         "thresholds_from_null",
         lambda values, select_cfg: replace(original(values, select_cfg), gate=1e9),
     )
-    cfg = small_config(get_arm("S_oracleq"))
+    cfg = small_config(_oracle_full())
     state = fresh_gpt2_state(cfg, world, tokenizer)
     report = run_night(state, cfg)
     assert all(e.status == "deferred" for e in state.store.all_real()) and len(state.store) == 2
@@ -587,7 +630,7 @@ def test_selection_scores_each_query_with_its_own_context_on_the_sampling_side(t
         return original(handle, items, *args, **kwargs)
 
     monkeypatch.setattr(night_module, "chd_safe", recording)
-    cfg = small_config(get_arm("S_oracleq"))
+    cfg = small_config(_oracle_full())
     run_night(fresh_gpt2_state(cfg, world, tokenizer), cfg)
     named = [item for item in seen if _names(item[0])]  # A model-generated pool query might name nobody.
     assert named
@@ -716,7 +759,7 @@ def test_s_full_night_with_templates_exercises_every_stage(tokenizer, world):
 
 
 def test_selection_arm_reports_all_candidates(tokenizer, world):
-    cfg = small_config(get_arm("S_oracleq"))
+    cfg = small_config(_oracle_full())
     state = fresh_gpt2_state(cfg, world, tokenizer)
     report = run_night(state, cfg)
     train = report.selection["train"]
@@ -1274,7 +1317,8 @@ def test_rollback_after_an_earlier_accepted_night_returns_to_that_night(tokenize
 
 
 def test_nocommit_accepts_what_commit_would_reject(tokenizer, world):
-    cfg = small_config(replace(get_arm("S_nocommit"), selection=False, write_gate=False, query_source="template"))
+    arm = replace(_oracle_full(), selection=False, write_gate=False, transactional=False)
+    cfg = small_config(arm)
     cfg.commit = CommitConfig(min_gap_drop=1e9)
     state = fresh_gpt2_state(cfg, world, tokenizer)
     report = run_night(state, cfg)
@@ -1376,7 +1420,7 @@ def test_exhaustion_stops_each_phase_and_leaves_a_partial_record(arm_name, night
 
 
 def test_stage_caps_stop_one_stage_starving_the_rest(tokenizer, world):
-    cfg = small_config(get_arm("S_oracleq"), night_tokens=4000)
+    cfg = small_config(_oracle_full(), night_tokens=4000)
     cfg.signals.k = 50  # Signals would eat everything if allowed.
     state = fresh_gpt2_state(cfg, world, tokenizer)
     report = run_night(state, cfg)
@@ -1449,7 +1493,7 @@ def test_world_seed_changes_the_run(tokenizer):
     assert not _adapters_equal(a.handle.delta.state_dict(), b.handle.delta.state_dict())
 
 
-@pytest.mark.parametrize("arm_name", ["S_oracleq", "B4_replay_kl"])
+@pytest.mark.parametrize("arm_name", ["S_oracleq", "S_core", "B4_replay_kl"])
 def test_resume_after_save_equals_uninterrupted_run(arm_name, tokenizer, tmp_path):
     cfg = small_config(get_arm(arm_name))
     straight = fresh_gpt2_state(cfg, TinyWorld(), tokenizer)

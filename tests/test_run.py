@@ -318,13 +318,13 @@ def _load(path):
 
 
 def test_every_experiment_has_a_config():
-    assert {p.stem for p in ALL_CONFIGS} == {f"e{i}" for i in range(7)}
+    assert {p.stem for p in ALL_CONFIGS} == {f"e{i}" for i in range(7)} | {"e0b"}
 
 
 @pytest.mark.parametrize("path", ALL_CONFIGS, ids=lambda p: p.stem)
 def test_config_is_well_formed(path):
     config = _load(path)
-    if path.stem == "e0":
+    if path.stem in ("e0", "e0b"):
         WorldConfig(**config["world"])
         return
     assert all(arm in ARMS for arm in config["arms"])
@@ -507,9 +507,11 @@ def test_a_crash_in_one_check_is_recorded_and_the_rest_go_on():
 
 
 def test_e0_workflow_is_manual_and_bounded():
+    """Triggered by hand or by a tag someone pushes on purpose, never by an ordinary push."""
     text = (ROOT / ".github" / "workflows" / "e0.yml").read_text(encoding="utf-8")
     triggers = text.split("permissions:")[0]
-    assert "workflow_dispatch" in triggers and "push:" not in triggers and "pull_request" not in triggers
+    assert "workflow_dispatch" in triggers and "pull_request" not in triggers
+    assert "tags:" in triggers and "branches" not in triggers
     assert "timeout-minutes: 350" in text and "HF_HUB_DISABLE_TELEMETRY" in text and "secrets." not in text
     assert "actions/cache" in text and "upload-artifact" in text and "whl/cpu" in text
 
@@ -671,7 +673,7 @@ def _h2_rows(reverse=0.6, alias=0.6, twohop=0.6, retention=0.9):
     for seed in range(5):
         rows.append(record("S_nopair", seed, 0, acq_reverse=reverse, acq_alias=alias, ret_real=retention))
         rows.append(record("B4_replay_kl", seed, 0, acq_reverse=0.4, acq_alias=0.4, ret_real=0.9))
-        rows.append(record("S_full", seed, 0, acq_twohop=twohop, ret_real=0.9))
+        rows.append(record("S_core", seed, 0, acq_twohop=twohop, ret_real=0.9))
         rows.append(record("B3_pairs", seed, 0, acq_twohop=0.4, ret_real=0.9))
     return rows
 
@@ -681,11 +683,11 @@ def test_h2_is_three_tests_on_the_amended_arms():
     group = group_of(_h2_rows())
     reverse = analyze.h2_member(group, "acq_reverse", "S_nopair", "B4_replay_kl", 200, 0)
     alias = analyze.h2_member(group, "acq_alias", "S_nopair", "B4_replay_kl", 200, 0)
-    twohop = analyze.h2_member(group, "acq_twohop", "S_full", "B3_pairs", 200, 0)
+    twohop = analyze.h2_member(group, "acq_twohop", "S_core", "B3_pairs", 200, 0)
     assert (reverse["status"], alias["status"], twohop["status"]) == ("supported",) * 3
     entries = analyze.evaluate_hypotheses(group, n_boot=1000)
     assert entries["H2_reverse"]["arms"] == ["S_nopair", "B4_replay_kl"]
-    assert entries["H2_twohop"]["arms"] == ["S_full", "B3_pairs"]
+    assert entries["H2_twohop"]["arms"] == ["S_core", "B3_pairs"]
     assert entries["H2"]["status"] == "supported"
 
 
@@ -703,7 +705,7 @@ def test_h2_needs_retention_not_worse():
 def test_h7_uses_twohop():
     rows = []
     for seed in range(5):
-        rows.append(record("S_full", seed, 0, acq_twohop=0.6))
+        rows.append(record("S_core", seed, 0, acq_twohop=0.6))
         rows.append(record("S_nopair", seed, 0, acq_twohop=0.2))
     assert analyze.evaluate_hypotheses(group_of(rows), n_boot=400)["H7"]["metric"] == "acq_twohop"
 
@@ -728,7 +730,7 @@ def test_h4_needs_the_gap_to_widen():
         for seed in range(5):
             for night in range(10):
                 chain = 0.2 + 0.05 * night if widening else 0.4 - 0.01 * night  # Narrowing, when not widening.
-                rows.append(record("S_full", seed, night, drift_generic=0.1, ret_real=0.9))
+                rows.append(record("S_core", seed, night, drift_generic=0.1, ret_real=0.9))
                 rows.append(record("S_chain", seed, night, drift_generic=chain, ret_real=0.5))
         return rows
 
@@ -742,7 +744,7 @@ def test_h5_needs_non_inferiority_and_bounded_rank():
         accuracy = {"acq_direct": 0.7, "acq_reverse": 0.5, "acq_alias": 0.5, "acq_twohop": 0.5}
         for seed in range(5):
             for night, rank in ((0, 100), (5, 200), (9, final_rank)):
-                full = record("S_full", seed, night, ret_real=0.9 - loss, **accuracy)
+                full = record("S_core", seed, night, ret_real=0.9 - loss, **accuracy)
                 full["metrics"]["delta_rank"] = rank
                 rows.append(full)
                 rows.append(record("S_nocompact", seed, night, ret_real=0.9, **accuracy))
@@ -756,27 +758,190 @@ def test_h5_needs_non_inferiority_and_bounded_rank():
 def test_h6_is_within_arm_and_needs_both_arms():
     rows = []
     for seed in range(5):
-        for arm in ("B3_replay", "S_full"):
+        for arm in ("B3_replay", "S_core"):
             rows.append(record(arm, seed, 9, entrench_follow_fact=0.3, entrench_follow_control=0.8))
     assert analyze.h6(group_of(rows), 200, 0)["status"] == "supported"
     assert analyze.h6(group_of(rows[::2]), 200, 0)["status"] == "missing"  # B3 alone.
 
 
-def test_h8_thresholds_and_not_measured_without_retirements():
-    def rows_for(value, false_rate, retired=10):
-        rows = []
-        for seed in range(5):
-            row = record("S_full", seed, 9)
-            row["metrics"].update(audit_auroc=value, false_retirement=false_rate, retired=retired)
-            rows.append(row)
-        return rows
+def _fact(key, role="tonight", gap_before=2.0, gap_after=1.0, correct_before=False, correct_after=True, heldout=True):
+    return {
+        "key": key,
+        "role": role,
+        "attr": "employer",
+        "gap_before": gap_before,
+        "gap_after": gap_after,
+        "heldout_before": gap_before if heldout else None,
+        "heldout_after": gap_after if heldout else None,
+        "heldout_n": 1 if heldout else 0,
+        "correct_before": correct_before,
+        "correct_after": correct_after,
+    }
 
-    assert analyze.h8(group_of(rows_for(0.8, 0.05)))["status"] == "supported"
-    assert analyze.h8(group_of(rows_for(0.7, 0.05)))["status"] == "not supported"
-    assert analyze.h8(group_of(rows_for(0.8, 0.2)))["status"] == "not supported"
-    # Review M7: with no retirements its second clause would otherwise pass on no data.
-    assert analyze.h8(group_of(rows_for(0.9, None, retired=0)))["status"] == "not measured"
-    assert analyze.h8(group_of(rows_for(0.9, 0.0, retired=1)))["status"] == "not measured"
+
+def _audit_record(seed, night, items, null=(1.0,), accepted=True, retire_nights=2):
+    row = record("S_core", seed, night)
+    row["report"]["fact_audit"] = {
+        "items": items, "null_gaps": list(null), "accepted": accepted, "retire_nights": retire_nights,
+    }
+    return row
+
+
+def test_fact_audit_night_reads_within_fact_change_and_the_controls():
+    taught = [
+        _fact("gained-1", gap_before=2.0, gap_after=0.5),
+        _fact("gained-2", gap_before=3.0, gap_after=1.0),
+        _fact("missed-1", gap_before=2.0, gap_after=1.9, correct_after=False),
+        _fact("missed-2", gap_before=3.0, gap_after=3.1, correct_after=False),
+        _fact("knew", gap_before=0.1, gap_after=0.1, correct_before=True),
+    ]
+    # Nothing taught these, and high ones fall anyway: regression to the mean, with slope -0.5.
+    controls = [
+        _fact(f"control:{i}", "control", gap_before=g, gap_after=0.5 * g + 0.5, correct_after=False, heldout=False)
+        for i, g in enumerate((0.0, 1.0, 2.0, 3.0))
+    ]
+    out = analyze.fact_audit_night(taught + controls)
+    assert out["taught"] == 5 and out["controls"] == 4
+    assert out["within_fact_auroc"] == pytest.approx(1.0)  # Among the four wrong before, knew is not counted.
+    assert out["auroc_probe"] == pytest.approx(1.0)  # Right (0.5, 1.0, 0.1); wrong (1.9, 3.1).
+    assert out["gap_vs_correct_change"] < 0  # A larger fall goes with gaining the fact.
+    assert out["control_regression_slope"] == pytest.approx(-0.5)
+    assert out["control_mean_gap_change"] == pytest.approx(-0.25)
+    # Each taught fact against the control line, 0.5 - 0.5 * before: the fall left after regression to the mean.
+    expected = sum(
+        (r["gap_after"] - r["gap_before"]) - (0.5 - 0.5 * r["gap_before"]) for r in taught
+    ) / len(taught)
+    assert out["taught_net_of_control"] == pytest.approx(expected)
+
+
+def test_fact_audit_night_is_none_where_it_has_nothing():
+    out = analyze.fact_audit_night([_fact("a", correct_before=True)])
+    assert out["within_fact_auroc"] is None and out["taught_net_of_control"] is None
+    assert out["control_regression_slope"] is None and out["auroc_probe"] is None
+
+
+def test_would_retire_counts_accepted_nights_in_a_row():
+    def night(number, gap, accepted=True, correct=True):
+        return _audit_record(0, number, [_fact("a", "older", gap_after=gap, correct_after=correct)], accepted=accepted)
+
+    assert analyze.would_retire([night(0, 0.5)]) == {}  # One low night of two.
+    assert analyze.would_retire([night(0, 0.5), night(1, 0.5)]) == {"a": False}
+    assert analyze.would_retire([night(0, 0.5), night(1, 0.5, correct=False)]) == {"a": True}
+    assert analyze.would_retire([night(0, 0.5), night(1, 5.0), night(2, 0.5)]) == {}  # A high gap resets.
+    # A rejected night neither counts nor resets.
+    assert analyze.would_retire([night(0, 0.5), night(1, 5.0, accepted=False), night(2, 0.5)]) == {"a": False}
+    # The verdict is at the final night, not at retirement.
+    assert analyze.would_retire([night(0, 0.5), night(1, 0.5), night(2, 0.5, correct=False)]) == {"a": True}
+
+
+def _h8_rows(separates=True, within=True, wrong_at_end=False, nights=2):
+    """Five seeds of ten facts. Five end right with low probe gaps, so they would retire; five stay wrong with high ones.
+
+    Each flag spoils exactly one clause: the held-out gap's AUROC, the within-fact AUROC, or who retirement would take.
+    """
+    rows = []
+    for seed in range(5):
+        for number in range(nights):
+            items = []
+            for i in range(10):
+                right = i < 5
+                gap_after = 0.5 if right else 1.5
+                fall = (1.0 if right else 0.1) if within else (0.1 if right else 1.0)
+                spoiled = wrong_at_end and number == nights - 1 and i < 3
+                row = _fact(f"f{i}", gap_before=gap_after + fall, gap_after=gap_after, correct_after=right and not spoiled)
+                if not separates:
+                    row["heldout_after"] = 1.5 if right else 0.5
+                items.append(row)
+            rows.append(_audit_record(seed, number, items, null=(1.0,)))
+    return rows
+
+
+def test_h8_reads_the_log_on_the_headline_arm():
+    good = analyze.h8(group_of(_h8_rows()))
+    assert good["status"] == "supported" and good["arms"] == ["S_core"]
+    assert good["mean_within_fact_auroc"] == pytest.approx(1.0) and good["counterfactual_retired"] == 25
+    assert analyze.h8(group_of(_h8_rows(separates=False)))["status"] == "not supported"
+    assert analyze.h8(group_of(_h8_rows(within=False)))["status"] == "not supported"
+
+
+def test_h8_fails_if_counterfactual_retirement_retires_what_is_wrong():
+    assert analyze.h8(group_of(_h8_rows(wrong_at_end=True)))["status"] == "not supported"
+
+
+def test_h8_is_not_measured_on_a_single_night_but_still_reports():
+    """Review M7: with nothing retired its last clause would otherwise pass on no data. E2 has one night."""
+    entry = analyze.h8(group_of(_h8_rows(nights=1)))
+    assert entry["status"] == "not measured" and entry["mean_auroc_probe"] == pytest.approx(1.0)
+
+
+def test_h8_is_missing_without_the_log():
+    assert analyze.h8(group_of([record("S_core", 0, 0)]))["status"] == "missing"
+    # An arm with the old audit metrics no longer stands in.
+    row = record("S_full", 0, 0)
+    row["metrics"].update(audit_auroc=0.9, false_retirement=0.0, retired=99)
+    assert analyze.h8(group_of([row]))["status"] == "missing"
+
+
+def test_h3_is_withdrawn_and_leaves_the_family_unless_selection_is_restored():
+    rows = []
+    for seed in range(5):
+        rows.append(record("S_core", seed, 0, acq_twohop=0.6))
+        rows.append(record("S_nopair", seed, 0, acq_twohop=0.2))
+    entries = analyze.evaluate_hypotheses(group_of(rows), n_boot=400)
+    assert entries["H3"]["status"] == "withdrawn" and "p_holm" not in entries["H3"]
+    assert entries["H7"]["p_holm"] == pytest.approx(entries["H7"]["p"] * (len(analyze.HOLM_FAMILY) - 1))
+    assert "H3" in analyze.format_hypothesis("H3", entries["H3"])
+
+
+def test_a_restored_s_full_is_reported_beside_the_headline_and_replaces_nothing():
+    rows = _h3_rows()
+    rows += [record("S_core", seed, 0, acq_twohop=0.5) for seed in range(5)]
+    rows += [record("B3_pairs", seed, 0, acq_twohop=0.5) for seed in range(5)]
+    group = group_of(rows)
+    assert analyze.evaluate_hypotheses(group, n_boot=100)["H2_twohop"]["arms"] == ["S_core", "B3_pairs"]
+    assert analyze.main_comparison(group, 50, 0)["B3_pairs"]["arm"] == "S_core"
+    assert analyze.main_comparison(group, 50, 0, "S_full")["B3_pairs"]["arm"] == "S_full"
+
+
+def test_fixed_anchor_counts_are_not_refused_as_a_fallback():
+    """A fallback fraction marks a matched arm whose source was missing. S_core's fraction is its design."""
+    rows = []
+    for seed in range(5):
+        rows.append(record("S_core", seed, 0, count_source="fixed_fraction", acq_twohop=0.6))
+        rows.append(record("B3_pairs", seed, 0, acq_twohop=0.4))
+    label, reasons = analyze.run_label(group_of(rows), ("S_core", "B3_pairs"), 5)
+    assert label == "confirmatory" and not reasons
+
+
+def test_a_real_core_run_reaches_the_analysis(tmp_path, capsys):
+    config = smoke_config(arms=("S_core",), nights=2, capability=None)
+    config["eval"]["drift"] = False
+    config["night"]["fact_audit"] = {"panel": 6, "controls": 2, "null_items": 2}
+    directory = runner.run_cell(config, only_cell(config), tmp_path, factory, None, "code-1", "cpu")
+    first, second = runner.read_results(directory / "results.jsonl")
+    audit = second["report"]["fact_audit"]
+    assert audit["items"] and audit["tokens"] > 0
+    assert {r["role"] for r in audit["items"]} >= {"control"}
+    assert first["report"]["selection"]["count_source"] == "fixed_fraction"
+    assert "signals" not in first["ledger"]["caps"]
+    assert second["ledger"]["exempt_forward"] >= first["eval_tokens"] + first["report"]["fact_audit"]["tokens"]
+    summary = analyze.analyze(tmp_path, n_boot=20)
+    assert summary["tiny/gpt2/default"]["fact_audit"]
+    analyze.main(["--results", str(tmp_path), "--n-boot", "10"])
+    assert "H8's log" in capsys.readouterr().out
+
+
+def test_the_arm_lists_follow_amendment_2():
+    for stem in ("e2", "e3", "e5", "e6"):
+        arms = _load(CONFIG_DIR / f"{stem}.json")["arms"]
+        assert "S_core" in arms and "S_full" not in arms and "S_noselect" not in arms, stem
+        assert _load(CONFIG_DIR / f"{stem}.json")["night"]["select"]["fixed_anchor_frac"] == 0.5
+    needed = {"S_core", "S_nopair", "S_chain", "S_nocompact", "B3_pairs", "B3_replay", "B4_replay_kl"}
+    for stem in ("e2", "e3"):
+        assert needed <= set(_load(CONFIG_DIR / f"{stem}.json")["arms"])
+    assert "S_core" in _load(CONFIG_DIR / "e4.json")["arms"]
+    # Restoring selection needs only the two arm names.
+    assert _load(CONFIG_DIR / "e3.json")["matched_arms"] == {"S_noselect": "S_full"}
 
 
 def test_age_table_pools_seeds():
@@ -797,7 +962,7 @@ def test_headline_is_the_pair_baseline_and_analyze_reads_a_real_run(straight_run
     assert list(summary) == ["tiny/gpt2/default"]
     analyze.main(["--results", str(root.parent), "--n-boot", "20"])
     output = capsys.readouterr().out
-    assert output.index("S_full versus B3_pairs") < output.index("S_full versus B3_replay") < output.index("Hypotheses")
+    assert output.index("S_core versus B3_pairs") < output.index("S_core versus B3_replay") < output.index("Hypotheses")
     assert "exploratory" in output and "Validity" in output
     entry = summary["tiny/gpt2/default"]
     assert entry["table"][0]["arm"] == "B3_replay"

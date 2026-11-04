@@ -24,7 +24,16 @@ from ..handle import ModelHandle, PromptFormat
 from ..ledger import ComputeLedger
 from ..memory import DistractorSampler, Episode, EpisodicStore, format_context, make_retriever
 from ..signals import SignalCache, chd_safe
-from .commit import AuditItem, Decision, decide, drift_by_target, drift_change, measure_gaps, update_episodes
+from .commit import (
+    AuditItem,
+    Decision,
+    decide,
+    decide_drift,
+    drift_by_target,
+    drift_change,
+    measure_gaps,
+    update_episodes,
+)
 from .compact import compact_and_repair, merge_only
 from .consolidate import (
     HardExample,
@@ -37,6 +46,7 @@ from .consolidate import (
     pair_examples,
     train_loop,
 )
+from .fact_audit import fact_audit_record, measure_fact_state, plan_fact_audit
 from .queries import (
     Candidate,
     PairQueryGen,
@@ -188,6 +198,7 @@ class NightReport:
     train: dict = field(default_factory=dict)
     compaction: dict = field(default_factory=dict)
     decision: dict = field(default_factory=dict)
+    fact_audit: dict = field(default_factory=dict)  # H8's exempt log. Nothing in a night reads it.
     retired: list[str] = field(default_factory=list)
     episodes_trained: int = 0  # Episodes in at least one completed optimizer step, training or repair.
     episodes_marked_consolidated: int = 0  # Of those, how many got `consolidated_night` for the first time.
@@ -210,7 +221,7 @@ def active_stage_fractions(arm: ArmConfig, cfg: NightConfig) -> dict[str, float]
         active.add("teacher")
     if arm.compact and cfg.compact.repair_steps > 0:
         active.add("repair")
-    if arm.audit:
+    if arm.audit or arm.drift_commit:
         active.add("audit")
     fractions = {stage: f for stage, f in cfg.budget.fractions.items() if stage in active}
     if arm.query_source != "none" and not (arm.selection or arm.write_gate):
@@ -221,7 +232,14 @@ def active_stage_fractions(arm: ArmConfig, cfg: NightConfig) -> dict[str, float]
 
 
 def _uniform_anchor_count(cfg: NightConfig, night: int, side: str, pool_size: int) -> tuple[int, str]:
-    """(n_anchor, source) for a draw without CHD: matched to the paired CHD arm, else a fraction of the pool."""
+    """(n_anchor, source) for a draw without CHD: matched to the paired CHD arm, else a fraction of the pool.
+
+    A fixed arm reads nothing from another arm. Its held-out anchors are only measured, so all of them are used: the
+    drift test alone decides its commit, and a share of `audit_max_anchors` would leave that test a handful of targets.
+    """
+    if cfg.arm.anchor_count == "fixed":
+        count = pool_size if side == "heldout" else math.floor(cfg.select.fixed_anchor_frac * pool_size)
+        return count, "fixed_fraction"
     matched = cfg.select.matched_selection
     record = matched.get(str(night)) if matched else None
     if record is not None:
@@ -499,6 +517,17 @@ def run_night(state: State, cfg: NightConfig) -> NightReport:
         for candidate in pool_train + pool_held:
             candidate.distractor, _ = draw_distractor(candidate, sampler, distractor_rng)
 
+        # ---- H8's log, before anything can train. Exempt, on its own seeds: the night cannot tell it ran.
+        fact_items: list = []
+        fact_before: list = []
+        fact_tokens = 0
+        if arm.passive_audit:
+            exempt_start = ledger.exempt_forward
+            with ledger.exempt():
+                fact_items = plan_fact_audit(world, store, night, state.world_seed, held_cands, cfg)
+                fact_before = measure_fact_state(handle, fact_items, world, state.world_seed, night, cfg)
+            fact_tokens = ledger.exempt_forward - exempt_start
+
         # ---- Audit, before training, on the weights we would roll back to. Paid from the audit stage, within a
         # share that keeps enough for the after pass.
         items: list[AuditItem] = []
@@ -512,12 +541,15 @@ def run_night(state: State, cfg: NightConfig) -> NightReport:
         audit_exhausted = False
         held_part = Partition()
         older = [e for e in store.replayable() if e.id not in new_ids]
-        if arm.audit:
-            cap = cfg.commit.audit_max_items
-            auditable = _shuffled([c for c in held_cands if c.context and c.distractor is not None], rng("audit_order"))
-            all_old = _load_old_items(store, {(c.query, c.context) for c in auditable})
-            auditable = auditable[: cap - min(len(all_old), int(cap * cfg.commit.old_item_share))]
-            old_items = all_old[: cap - len(auditable)]
+        if arm.audit or arm.drift_commit:
+            auditable: list[Candidate] = []
+            old_items: list[AuditItem] = []
+            if arm.audit:
+                cap = cfg.commit.audit_max_items
+                auditable = _shuffled([c for c in held_cands if c.context and c.distractor is not None], rng("audit_order"))
+                all_old = _load_old_items(store, {(c.query, c.context) for c in auditable})
+                auditable = auditable[: cap - min(len(all_old), int(cap * cfg.commit.old_item_share))]
+                old_items = all_old[: cap - len(auditable)]
             anchor_cands = _shuffled(
                 [c for c in pool_held if c.distractor is not None], rng("audit_anchor_order")
             )[: cfg.commit.audit_max_anchors]
@@ -530,23 +562,27 @@ def run_night(state: State, cfg: NightConfig) -> NightReport:
                 else:
                     n_anchor, _ = _uniform_anchor_count(cfg, night, "heldout", len(anchor_cands))
                     held_part = uniform_partition(auditable, anchor_cands, n_anchor, rng("uniform_heldout"))
-                flagged = [c for c in held_part.integrate if c.distractor is not None]
-                new_items = [AuditItem(c.query, c.context, c.distractor, c.episode_ids) for c in flagged]
-                for candidate, item in zip(flagged, new_items):
-                    # Kept for later nights' pressure and retirement. Stored once, on the first episode.
-                    store.get(candidate.episode_ids[0]).meta.setdefault("audit_items", []).append(item.to_dict())
-                items = new_items + old_items
-                gate_count = len(new_items)
                 after_start = ledger.spent("audit")
-                gaps_before, exhausted = measure_gaps(handle, items, state.world_seed, night, k, max_new)
-                audit_exhausted = audit_exhausted or exhausted
-                control = _control_items(auditable, sampler, cfg.commit.control_items, rng("audit_control"))
-                control_before, exhausted = measure_gaps(handle, control, state.world_seed, night, k, max_new)
-                audit_exhausted = audit_exhausted or exhausted
+                if arm.audit:
+                    flagged = [c for c in held_part.integrate if c.distractor is not None]
+                    new_items = [AuditItem(c.query, c.context, c.distractor, c.episode_ids) for c in flagged]
+                    for candidate, item in zip(flagged, new_items):
+                        # Kept for later nights' pressure and retirement. Stored once, on the first episode.
+                        store.get(candidate.episode_ids[0]).meta.setdefault("audit_items", []).append(item.to_dict())
+                    items = new_items + old_items
+                    gate_count = len(new_items)
+                    after_start = ledger.spent("audit")
+                    gaps_before, exhausted = measure_gaps(handle, items, state.world_seed, night, k, max_new)
+                    audit_exhausted = audit_exhausted or exhausted
+                    control = _control_items(auditable, sampler, cfg.commit.control_items, rng("audit_control"))
+                    control_before, exhausted = measure_gaps(handle, control, state.world_seed, night, k, max_new)
+                    audit_exhausted = audit_exhausted or exhausted
                 if arm.anchors != "none" and held_part.anchor:
                     specs = _anchor_specs(held_part.anchor, arm, older, cfg.select.lexical_min)
                     heldout_anchor_targets, exhausted = build_targets(handle, specs, cfg.teacher, rng("audit_anchors"))
                     audit_exhausted = audit_exhausted or exhausted
+                    if not arm.audit:
+                        after_start = ledger.spent("audit")  # The targets are stored, so the after pass only scores.
                     drift_before, exhausted = drift_by_target(handle, heldout_anchor_targets)
                     audit_exhausted = audit_exhausted or exhausted
                 audit_after_need = ledger.spent("audit") - after_start
@@ -608,16 +644,19 @@ def run_night(state: State, cfg: NightConfig) -> NightReport:
     if "teacher" in ledger.caps:
         teacher_rng = rng("teacher")
         with ledger.stage("teacher"):
-            if arm.teacher_kl:
-                specs = [
-                    TargetSpec(c.query, c.context, "committed", "integrate", c.context_ids)
-                    for c in train_part.integrate
-                ]
-                integrate_targets, exhausted = build_targets(handle, specs, cfg.teacher, teacher_rng, cache)
-                teacher_exhausted = teacher_exhausted or exhausted
+            # Anchors first: they are few, and a stage spent on integrate targets would leave an arm with none. Without
+            # a CHD filter integrate targets can fill the stage, so they go in a seeded mixed order: otherwise pairs,
+            # appended last, would be what a short budget always drops, which would bias H7.
             if arm.anchors != "none":
                 specs = _anchor_specs(train_part.anchor, arm, older, cfg.select.lexical_min)
                 anchor_targets, exhausted = build_targets(handle, specs, cfg.teacher, teacher_rng, cache)
+                teacher_exhausted = teacher_exhausted or exhausted
+            if arm.teacher_kl:
+                specs = [
+                    TargetSpec(c.query, c.context, "committed", "integrate", c.context_ids)
+                    for c in _shuffled(train_part.integrate, rng("teacher_order"))
+                ]
+                integrate_targets, exhausted = build_targets(handle, specs, cfg.teacher, teacher_rng, cache)
                 teacher_exhausted = teacher_exhausted or exhausted
             if arm.self_sampled_kl:
                 self_targets, exhausted = build_self_sampled_targets(handle, cfg.teacher, teacher_rng)
@@ -682,8 +721,25 @@ def run_night(state: State, cfg: NightConfig) -> NightReport:
             control_after,
         )
         decision.anchor_drift_before, decision.anchor_drift_after = mean_before, mean_after
+    elif arm.drift_commit:
+        with handle.banks("committed"), ledger.stage("audit"):
+            drift_after, exhausted = drift_by_target(handle, heldout_anchor_targets)
+            audit_exhausted = audit_exhausted or exhausted
+        mean_before, mean_after = drift_change(drift_before, drift_after)
+        increase = mean_after - mean_before if mean_before is not None and mean_after is not None else None
+        decision = decide_drift(increase, cfg.commit, arm.transactional, audit_exhausted)
+        decision.anchor_drift_before, decision.anchor_drift_after = mean_before, mean_after
+        decision.drift_targets = sum(1 for b, a in zip(drift_before, drift_after) if b is not None and a is not None)
     if not decision.accepted:
         delta.restore(snapshot)
+    if arm.passive_audit:
+        # On the weights now in place: after a rejection these are the weights from before, as they should be.
+        exempt_start = ledger.exempt_forward
+        with ledger.exempt(), handle.banks("committed"):
+            report.fact_audit = fact_audit_record(
+                handle, fact_items, fact_before, world, state.world_seed, night, decision.accepted, cfg
+            )
+        report.fact_audit["tokens"] = fact_tokens + ledger.exempt_forward - exempt_start
     trained = set(train_result.trained_episode_ids)
     trained.update((report.compaction.get("repair") or {}).get("trained_episode_ids", []))
     report.episodes_trained = len(trained)

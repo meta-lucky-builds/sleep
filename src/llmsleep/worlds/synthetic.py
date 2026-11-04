@@ -121,6 +121,20 @@ class Lookalike:
     target: str
 
 
+@dataclass(frozen=True)
+class ControlFact:
+    """A statement about a never-taught person: in no episode, no store and no training data, on any night."""
+
+    key: str
+    attr: str
+    subject: str
+    value: str
+    query: str
+    text: str
+    gold: tuple[str, ...]
+    entities: tuple[str, ...]
+
+
 class SyntheticWorld:
     """Implements `WorldLike`. Raises `TemplateLeakError` at construction if invariant 6 is broken."""
 
@@ -444,6 +458,46 @@ class SyntheticWorld:
         else:
             raise ValueError(f"no contradiction for attribute {fact.attr!r}")
         return rng.choice([value for value in pool if value != fact.value])
+
+    def control_facts(self, n: int) -> list[ControlFact]:
+        """H8's control: up to n facts in the stream's own wording, about `control_persons`. A pure function of the seed.
+
+        Values are drawn from the taught vocabularies, so a closed-book answer that has only picked up the answer's type
+        scores on these at about the rate it would by chance on a taught fact. Uses its own RNG, so the stream and the
+        fingerprint do not change.
+        """
+        rng = self._rng("fact_audit_controls")
+        attrs = [a for a in ("employer", "hometown", "instrument", "birth_year", "invention") if a in self._eval["direct"]]
+        pairs = [(person, attr) for person in self.control_persons for attr in attrs]
+        out: list[ControlFact] = []
+        for person, attr in rng.sample(pairs, min(max(0, n), len(pairs))):
+            value = self._control_value(attr, rng)
+            text = self._train[attr]["statements"][0].format(subject=person, value=value)
+            named = (person, value) if attr in _NAMED_VALUE_ATTRS else (person,)
+            out.append(
+                ControlFact(
+                    key=f"control:{person}.{attr}",
+                    attr=attr,
+                    subject=person,
+                    value=value,
+                    query=self._eval["direct"][attr][0].format(subject=person),
+                    text=text,
+                    gold=self.value_forms(attr, value),
+                    entities=named,
+                )
+            )
+        return out
+
+    def _control_value(self, attr: str, rng: SeededRng) -> str:
+        if attr == "employer":
+            return rng.choice(self.orgs).name
+        if attr == "hometown":
+            return rng.choice(self.cities).name
+        if attr == "instrument":
+            return rng.choice(INSTRUMENTS)
+        if attr == "birth_year":
+            return rng.choice(BIRTH_YEARS)
+        return self._device[rng.choice(self.persons).id]
 
     def fingerprint(self) -> str:
         """Identifies stream and probes together, so results can show they were the same across arms."""
