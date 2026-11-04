@@ -1,4 +1,8 @@
 runs/
+logs/
+.results-repo/
+.hf-cache/
+results.tar.gz
 __pycache__/
 *.pyc
 .pytest_cache/

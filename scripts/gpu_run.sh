@@ -49,6 +49,12 @@ nvidia-smi --query-gpu=index,name,memory.total,memory.used --format=csv
 df -h "$ROOT" | tail -1
 say "$GPUS GPUs, $PER_GPU cells per GPU, $THREADS threads per cell, git $(git rev-parse --short HEAD)"
 
+# Results go to the results-live branch every 10 minutes if GH_TOKEN is set.
+if [ -n "${GH_TOKEN:-}" ] && ! pgrep -f push_results.sh > /dev/null; then
+  nohup bash scripts/push_results.sh >> "$LOGS/push.log" 2>&1 < /dev/null &
+  say "Pushing results to the results-live branch every 10 minutes"
+fi
+
 # ---- GPU smoke test: fp16, SDPA and the real tokenizer on a GPU, for the first time. ----
 SMOKE="$ROOT/runs/smoke/smoke_Qwen__Qwen2.5-0.5B.json"
 if ! grep -q '"passed": true, "question_sets"' "$SMOKE" 2>/dev/null; then
@@ -109,3 +115,26 @@ if [ "$E1_CODE" -eq 0 ]; then
 else
   say "FINISHED WITH FAILURES. Download $ROOT/results.tar.gz, and running this script again will retry the failed cells."
 fi
+
+# ---- With a token, wait for the next stage: configs/next_stage.txt on the working branch names a config. ----
+[ -n "${GH_TOKEN:-}" ] || exit 0
+say "Watching for the next stage. Billing continues until you destroy this instance."
+ALL_SLOTS=""
+for gpu in $(seq 0 "$LAST"); do
+  for _ in $(seq 1 "$PER_GPU"); do ALL_SLOTS="$ALL_SLOTS,$gpu"; done
+done
+ALL_SLOTS="${ALL_SLOTS#,}"
+while true; do
+  sleep 300
+  git fetch -q --depth 1 origin refs/heads/feat/sleep-framework 2>/dev/null || continue
+  NEXT="$(git show FETCH_HEAD:configs/next_stage.txt 2>/dev/null | tr -d '[:space:]')"
+  [ -n "$NEXT" ] && [ ! -f "runs/.done-$NEXT" ] || continue
+  git checkout -q --detach FETCH_HEAD || continue
+  say "Stage $NEXT at git $(git rev-parse --short HEAD)"
+  if "$PY" scripts/schedule.py --config "configs/$NEXT.json" --out "runs/$NEXT" --logs "$LOGS/$NEXT" --slots "$ALL_SLOTS" --threads "$THREADS"; then
+    say "Stage $NEXT finished"
+  else
+    say "Stage $NEXT finished with failures"
+  fi
+  touch "runs/.done-$NEXT"
+done
