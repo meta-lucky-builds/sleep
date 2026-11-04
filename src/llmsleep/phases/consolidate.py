@@ -35,6 +35,10 @@ from ..memory import Episode, format_context
 from ..signals import SignalCache, get_samples
 from .queries import normalize_query
 
+_FRAME_DRAW = 16  # Question-frame samples per draw, however large the batch size.
+_NEGATIVE_PASSES = 4  # Over the sources; a small store can then still fill its count with different scrambles.
+IDK_ANSWER = "I don't know"  # The eval's abstention check recognises it; a test holds it to that.
+
 
 def residual_log_mass(log_probs: Tensor, top_idx: Tensor) -> Tensor:
     """(N,) log of the total mass outside `top_idx`. Summed in log space: 1 - sum(top) loses all precision."""
@@ -187,6 +191,146 @@ def build_self_sampled_targets(
     except LedgerExhausted:
         return targets, cfg.self_samples is not None
     return targets, False
+
+
+def frame_question(text: str, finished: bool) -> Optional[str]:
+    """The line a model wrote in the question slot, if it is a whole one. Imperatives count: the eval's forms use them."""
+    line = text.strip()
+    if not finished or not line or "\n" in line or len(line.split()) < 2 or line[-1] not in "?.":
+        return None
+    return line
+
+
+def build_question_frame_targets(
+    handle: ModelHandle, cfg: TeacherConfig, generator: torch.Generator
+) -> tuple[list[TokenTargets], bool, dict]:
+    """Question-frame anchors (A3.2): germline writes a question, then answers it, and germline's distributions over
+    both are the target. Returns (targets, exhausted, stats).
+
+    Germline writes a question line after the frame's opening. That line goes back through the same prompt the eval
+    builds, and germline answers it. So the sequence is exactly what an evaluated closed-book question looks like,
+    and every question and answer token came from the model. The only inputs are the model and the prompt template:
+    this takes no world, store or question list, so no real QA can reach it (`ret_real`'s set is never in a night).
+
+    Draws are small and fit to what is left, so a short night loses little to a draw that cannot finish.
+    """
+    room = handle.ledger.room()
+    if cfg.self_samples is None and room is None:
+        raise ValueError("an unmetered ledger needs an explicit self_samples")
+    opening = handle.encode_prompt(handle.question_open())
+    targets: list[TokenTargets] = []
+    questions: list[str] = []
+    attempted = 0
+    cost: Optional[float] = None
+    # A model may never write a usable line, so a fixed count needs a bound on the tries.
+    most_attempts = None if cfg.self_samples is None else 20 * cfg.self_samples
+    exhausted = False
+    try:
+        with handle.banks("germline"):
+            while most_attempts is None or attempted < most_attempts:
+                n = min(handle.batch_size, _FRAME_DRAW)
+                if cfg.self_samples is not None:
+                    n = min(n, cfg.self_samples - len(targets))
+                room = handle.ledger.room()
+                if cost is not None and room is not None:
+                    n = min(n, int(room / cost))
+                if n < 1:
+                    break
+                drawn = handle.sample([opening], n, cfg.self_max_new_tokens, 1.0, generator, answer_mode=True)[0]
+                attempted += n
+                lines = [frame_question(handle.decode(s.token_ids), s.finished) for s in drawn]
+                written = [line for line in lines if line is not None]
+                prompts = [handle.encode_prompt(handle.format(line, None)) for line in written]
+                # On a tokenizer that merges across the boundary, the opening would not be a prefix: leave the line out.
+                usable = [(l, p) for l, p in zip(written, prompts) if p[: len(opening)] == opening and len(p) > len(opening)]
+                if usable:
+                    answers = handle.sample([p for _, p in usable], 1, cfg.max_new_tokens, 1.0, generator, answer_mode=True)
+                    sequences = [p[len(opening) :] + a[0].token_ids for (_, p), a in zip(usable, answers)]
+                    targets.extend(_targets_from_samples(handle, opening, opening, sequences, cfg.top_k, "self_frame"))
+                    questions.extend(line for line, _ in usable)
+                left = handle.ledger.room()
+                if room is not None and left is not None:
+                    cost = max(1.0, (room - left) / n)
+    except LedgerExhausted:
+        exhausted = cfg.self_samples is not None
+    return targets, exhausted, {"attempted": attempted, "sequences": len(targets), "questions": questions}
+
+
+def scramble_name(name: str, generator: torch.Generator) -> Optional[str]:
+    """A full name with two different letters of one word swapped, first letters kept. None if no word allows it.
+
+    It reads only the name, and it cannot equal an evaluation look-alike or another name. A look-alike changes one letter
+    of a word, while a swap of different letters changes two. World names are at least three edits apart, so a word two
+    edits from one of them is none of them.
+    """
+    words = name.split()
+    options = []
+    for index, word in enumerate(words):
+        swaps = [
+            (a, b)
+            for a in range(1, len(word))
+            for b in range(a + 1, len(word))
+            if word[a].isalpha() and word[b].isalpha() and word[a].casefold() != word[b].casefold()
+        ]
+        if swaps:
+            options.append((index, swaps))
+    if not options:
+        return None
+    index, swaps = options[int(torch.randint(len(options), (1,), generator=generator))]
+    a, b = swaps[int(torch.randint(len(swaps), (1,), generator=generator))]
+    letters = list(words[index])
+    letters[a], letters[b] = letters[b], letters[a]
+    words[index] = "".join(letters)
+    return " ".join(words)
+
+
+def negative_examples(
+    handle: ModelHandle, episodes: Sequence[Episode], count: int, generator: torch.Generator
+) -> list[HardExample]:
+    """Up to `count` of: an episode's own training question, about a scrambled full name, answered "I don't know" (A4.1).
+
+    The questions are those the hard labels already use, so no evaluation form is involved. They teach no episode.
+    """
+    sources = [
+        (query, episode.entities[0])
+        for episode in episodes
+        if episode.entities and len(episode.entities[0].split()) >= 2
+        for query, _ in episode.meta.get("qa", [])
+        if episode.entities[0] in query
+    ]
+    answer = handle.encode_answer(IDK_ANSWER)
+    out: list[HardExample] = []
+    seen: set[str] = set()
+    if not sources or count < 1:
+        return out
+    for _ in range(_NEGATIVE_PASSES):
+        for index in torch.randperm(len(sources), generator=generator).tolist():
+            if len(out) >= count:
+                return out
+            query, name = sources[index]
+            scrambled = scramble_name(name, generator)
+            if scrambled is None:
+                continue
+            question = query.replace(name, scrambled)
+            if question not in seen:
+                seen.add(question)
+                out.append(HardExample(handle.encode_prompt(handle.format(question, None)), answer))
+    return out
+
+
+def derived_examples(handle: ModelHandle, facts: Sequence, exclude_queries: AbstractSet[str] = frozenset()) -> list[HardExample]:
+    """Composed facts told outright, in the two forms every other fact is taught in: plain text and closed-book QA."""
+    start = handle.start_ids()
+    eos = handle.text_end_ids()
+    out: list[HardExample] = []
+    for fact in facts:
+        for text in fact.statements:
+            out.append(HardExample(start, handle.encode_continuation(text) + eos, fact.episode_ids))
+        for query, answer in fact.qa:
+            if normalize_query(query) not in exclude_queries:
+                prompt = handle.encode_prompt(handle.format(query, None))
+                out.append(HardExample(prompt, handle.encode_answer(answer), fact.episode_ids))
+    return out
 
 
 def hard_examples(

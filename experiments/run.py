@@ -37,7 +37,7 @@ if str(_ROOT / "src") not in sys.path:
 import torch  # noqa: E402
 
 from llmsleep.config import NightConfig  # noqa: E402
-from llmsleep.eval.capability import CapabilityConfig, build_capability, cache_path  # noqa: E402
+from llmsleep.eval.capability import CapabilityConfig, build_capability, cache_path, question_overlap  # noqa: E402
 from llmsleep.eval.drift import build_drift_probe  # noqa: E402
 from llmsleep.eval.entrench import evaluate_entrenchment  # noqa: E402
 from llmsleep.eval.metrics import EvalConfig, eval_batch_size, evaluate_night  # noqa: E402
@@ -277,6 +277,14 @@ def _prune_checkpoints(root: Path, keep: int) -> None:
         shutil.rmtree(root / name)
 
 
+def _drop_final_weights(config: dict, roots: Path) -> None:
+    """With "drop_finished_weights", a finished cell keeps no adapters, to save disk. Its LATEST stays: it says the cell
+    is done, so a rerun skips it. Nothing can resume or evaluate from these checkpoints afterwards."""
+    if config.get("drop_finished_weights"):
+        for path in roots.glob("night-*/adapters.pt"):
+            path.unlink()
+
+
 def run_cell(
     config: dict,
     cell: Cell,
@@ -305,6 +313,7 @@ def run_cell(
     roots = directory / "checkpoints"
     if (roots / "LATEST").exists() and (roots / "LATEST").read_text(encoding="utf-8").strip() == f"night-{world.nights:05d}":
         _rebuild_results(directory, world.nights)  # A kill may have struck between the last commit and append.
+        _drop_final_weights(config, roots)
         return directory
 
     state = _prepare_state(night_cfg, cell, world, factory, device or default_device())
@@ -341,6 +350,9 @@ def run_cell(
         )
         eval_tokens = state.ledger.exempt_forward + state.ledger.exempt_backward - exempt_before
         report_dict = report.to_dict()
+        written = report_dict["teacher"].get("frame", {}).get("questions")
+        if written is not None and capability is not None:
+            metrics["frame_capability_overlap"] = question_overlap(written, capability)
         record = {
             "experiment": config.get("experiment"),
             "seed_role": config.get("seed_role"),
@@ -373,6 +385,7 @@ def run_cell(
         with open(directory / "timing.jsonl", "a", encoding="utf-8") as stream:
             stream.write(json.dumps({"night": night, "seconds": time.time() - started}) + "\n")
         print(f"{cell.arm} seed {cell.seed} night {night} done in {time.time() - started:.0f}s", flush=True)
+    _drop_final_weights(config, roots)
     return directory
 
 

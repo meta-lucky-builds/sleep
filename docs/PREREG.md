@@ -169,6 +169,18 @@ Results in `docs/results/E1.md`. E1 is pilot data on dev seed 7. Nothing here is
 
 **A3.7 Audit.** H8 gets its look at E1b's gentler settings. If held-out AUROC stays under 0.75 at the chosen setting, the audit idea is dropped, along with write gate, pressure and retirement, leaving a fixed schedule.
 
+## Amendment 4 (2026-11-04, before E1b; the user asked for fewer rounds)
+
+**A4.1 Upgrades tested in E1b.** Three more arms, each with a stated target:
+- **`B4q_idk`:** `B4q` plus "I don't know" targets on invented look-alike names, generated oracle-free by scrambling taught names. They must be disjoint from the world's evaluation look-alikes. **H11:** cuts `false_recall_neighbour` by at least 15 points with `acq_direct` within 5.
+- **`B4q_compact`:** `B4q` plus nightly spectral compaction and repair. **H12:** raises `ret_real` by at least 5 points with `acq_direct` within 5.
+- **`B4q_r8`:** `B4q` at rank 8. **H13:** less capacity means less collateral damage; raises `ret_real` by at least 5 points with `acq_direct` within 5.
+E1b's numbers are exploratory, single-seed; these are prompts for E3x, not findings.
+
+**A4.2 E3x runs automatically after E1b, on the same machine.** A script applies A3.4 to E1b's results, generates the config, and runs 10 nights on **exploratory seeds 2001 to 2005**, with the same facts per night as E1. Arms: `B3_pairs`, `B4_replay_kl`, `B4q`, `S_core`, `S_coreq`, and the two best upgrades by rule: largest `ret_real` subject to `acq_direct` at least 0.7, ties to lower `false_recall_neighbour`. **E3x is labelled exploratory whatever it shows. Seeds 1001 to 1005 stay untouched** for a later confirmatory run, on hypotheses E3x makes worth testing.
+
+**A4.3 Cheaper evaluation in E1b and E3x.** Probes per kind 60, real questions 150, audit log only on `S_core`. Metric definitions are unchanged, but with fewer items, so CIs widen. E1's numbers remain comparable, with that caveat.
+
 ## Threats accepted
 
 Synthetic facts are not real experience; templated eval could be easier than real use. Results on 1 to 3B models may not transfer up or down (T2 §9). Ten nights is short of deployment timescales. The world generator was written by the same author as the method, so eval templates are fixed and reviewed before any arm runs.

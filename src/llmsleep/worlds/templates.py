@@ -130,6 +130,38 @@ TRAIN_PAIR_TEMPLATES: dict[tuple[str, str], list[str]] = {
     ],
 }
 
+# Composed facts, told outright. Oracle data, for one benchmark arm and oracle queries (A3.2). Not one of them may share
+# a 4-gram with an evaluation form, which is why these say "the person called" where the eval says "someone nicknamed".
+# Two-hop questions are TRAIN_PAIR_TEMPLATES above.
+TRAIN_DERIVED_TEMPLATES: dict[str, dict] = {
+    "alias": {
+        "employer": {
+            "statements": ["The person called {alias} works at {value}.", "{alias} is the nickname of someone employed by {value}."],
+            "qa": ["Where does the person called {alias} work?"],
+        },
+        "hometown": {
+            "statements": ["The person called {alias} grew up in {value}.", "{alias} is the nickname of someone raised in {value}."],
+            "qa": ["Where did the person called {alias} grow up?"],
+        },
+        "instrument": {
+            "statements": ["The person called {alias} plays the {value}.", "{alias} is the nickname of someone who plays the {value}."],
+            "qa": ["What instrument does the person called {alias} play?"],
+        },
+        "birth_year": {
+            "statements": ["The person called {alias} entered the world in {value}.", "{alias} is the nickname of someone born in {value}."],
+            "qa": ["What year was the person called {alias} born?"],
+        },
+        "invention": {
+            "statements": ["The person called {alias} invented the {value}.", "{alias} is the nickname of the inventor of the {value}."],
+            "qa": ["What did the person called {alias} invent?"],
+        },
+    },
+    "two_hop": {
+        ("employer", "hq_city"): ["The employer of {subject} is based in {value}.", "{subject} works for a company based in {value}."],
+        ("hometown", "region"): ["The hometown of {subject} lies in {value}.", "{subject} grew up in a town in {value}."],
+    },
+}
+
 _SLOT = re.compile(r"\{[a-z_]+\}(?:'s)?")
 _WORD = re.compile(r"[a-z0-9]+(?:'[a-z]+)?")
 
@@ -156,12 +188,19 @@ def eval_templates_sha(path: Path = EVAL_TEMPLATE_FILE) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
 
 
-def iter_train_templates(train: dict = TRAIN_TEMPLATES, pairs: dict = TRAIN_PAIR_TEMPLATES) -> Iterator[str]:
+def iter_train_templates(
+    train: dict = TRAIN_TEMPLATES, pairs: dict = TRAIN_PAIR_TEMPLATES, derived: dict = TRAIN_DERIVED_TEMPLATES
+) -> Iterator[str]:
     for attr in sorted(train):
         for group in ("statements", "reversals", "qa", "reverse_qa"):
             yield from train[attr][group]
     for key in sorted(pairs):
         yield from pairs[key]
+    for attr in sorted(derived["alias"]):
+        yield from derived["alias"][attr]["statements"]
+        yield from derived["alias"][attr]["qa"]
+    for key in sorted(derived["two_hop"]):
+        yield from derived["two_hop"][key]
 
 
 def iter_eval_templates(templates: dict) -> Iterator[str]:

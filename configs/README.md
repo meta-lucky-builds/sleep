@@ -13,6 +13,7 @@ JSON has no comments, so assumptions live here. **Every time and size below is a
 - 7: dev world (E0, E1). Pilot tuning uses this only.
 - 8: E0b tuning. 9: E0b's single confirming test (A2.3).
 - 2001-2003: E5 sweep, labelled exploratory.
+- 2001-2005: E3x, labelled exploratory whatever it shows (A4.2). `scripts/pick_setting.py` writes its config from `e3x.template.json` and refuses 1001-1005.
 - 1001-1005: confirmatory worlds. Never used in piloting. A test enforces that the dev seed appears in no confirmatory config.
 
 ## Assumptions for a Colab T4

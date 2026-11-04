@@ -33,6 +33,11 @@ class ArmConfig:
     Since A2.1 the ablations S_oracleq, S_nokl, S_chain, S_nocompact, S_nopair, S_nocommit and S_bm25 derive from
     S_core, one flag each, without the exempt log, which only S_core pays time for. S_noselect still derives from
     S_full, since H3 needs that pair, and both run only if E0b restores selection.
+
+    Question-frame anchors (A3.2) are self-samples that open with the closed-book prompt, as the eval frames a question.
+    An arm with no teacher spends its whole teacher stage on them. S_coreq has a teacher, so the same stage pays:
+    `TeacherConfig.frame_share` of it, at the expense of integrate targets. Its train stage has S_core's cap, so
+    hard labels pay nothing.
     """
 
     name: str
@@ -48,7 +53,11 @@ class ArmConfig:
     anchors: str = "none"  # Target when an anchor query touches nothing consolidated.
     anchor_count: str = "matched"  # Selection off. matched: the paired arm's count, else a fallback. fixed: a set share.
     self_sampled_kl: bool = False  # KL to germline on text sampled from germline (Marek, A14).
+    self_sample_frame: bool = False  # Those samples open with the question frame: question, then answer (A3.2).
     hard_pool: str = "none"  # Which real episodes feed the hard-label CE term.
+    derived_hard: bool = False  # Hard labels also state true alias and two-hop facts. Oracle data, benchmark only (A3.2).
+    idk_negatives: bool = False  # Hard labels also say "I don't know" about scrambled taught names (A4.1).
+    rank_override: int | None = None  # This arm's delta rank, at the same LoRA scale. None: ModelConfig.rank (A4.1).
     compact: bool = False  # SVT plus repair. Off: exact merge only.
     audit: bool = False  # Measure held-out gaps; drives pressure and retirement.
     drift_commit: bool = False  # Test anchor drift only, paid from the audit stage. No gap is measured for it.
@@ -88,6 +97,12 @@ class ArmConfig:
             raise ValueError("anchors need a query generator for their pool")
         if self.train and self.hard_pool == "none" and not self.teacher_kl:
             raise ValueError("a training arm needs a hard pool or a teacher")
+        if self.self_sample_frame and not self.self_sampled_kl:
+            raise ValueError("question-frame samples are self-samples")
+        if (self.derived_hard or self.idk_negatives) and self.hard_pool == "none":
+            raise ValueError("derived facts and negatives are hard labels, so they need a hard pool")
+        if self.rank_override is not None and self.rank_override < 1:
+            raise ValueError("rank_override must be positive")
 
 
 _S_FULL = ArmConfig(
@@ -122,6 +137,7 @@ _S_CORE = ArmConfig(
 )
 
 _B3 = ArmConfig(name="B3_replay", train=True, hard_pool="all_real")
+_B4Q = replace(_B3, name="B4q", self_sampled_kl=True, self_sample_frame=True)
 
 ARMS: dict[str, ArmConfig] = {
     "B0_frozen": ArmConfig(name="B0_frozen"),
@@ -130,7 +146,13 @@ ARMS: dict[str, ArmConfig] = {
     "B3_replay": _B3,
     "B3_pairs": replace(_B3, name="B3_pairs", replay_pairs=True),
     "B4_replay_kl": replace(_B3, name="B4_replay_kl", self_sampled_kl=True),
+    "B3_derived": replace(_B3, name="B3_derived", derived_hard=True),
+    "B4q": _B4Q,
+    "B4q_idk": replace(_B4Q, name="B4q_idk", idk_negatives=True),
+    "B4q_compact": replace(_B4Q, name="B4q_compact", compact=True),
+    "B4q_r8": replace(_B4Q, name="B4q_r8", rank_override=8),
     "S_core": replace(_S_CORE, passive_audit=True),
+    "S_coreq": replace(_S_CORE, name="S_coreq", self_sampled_kl=True, self_sample_frame=True),
     "S_full": _S_FULL,
     "S_noselect": replace(_S_FULL, name="S_noselect", selection=False, write_gate=False),
     "S_oracleq": replace(_S_CORE, name="S_oracleq", query_source="template"),

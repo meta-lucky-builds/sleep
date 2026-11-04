@@ -3,6 +3,8 @@ logs/
 .results-repo/
 .hf-cache/
 results.tar.gz
+partial.tar.gz
+*.tar.gz.tmp
 __pycache__/
 *.pyc
 .pytest_cache/

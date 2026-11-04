@@ -42,8 +42,11 @@ from pathlib import Path
 from typing import Any, Optional, Sequence
 
 _ROOT = Path(__file__).resolve().parents[1]
-if str(_ROOT / "src") not in sys.path:
-    sys.path.insert(0, str(_ROOT / "src"))
+for _path in (_ROOT / "src", _ROOT / "scripts"):
+    if str(_path) not in sys.path:
+        sys.path.insert(0, str(_path))
+
+import pick_setting  # noqa: E402
 
 from llmsleep.stats import (  # noqa: E402
     BootstrapResult,
@@ -684,6 +687,122 @@ def analyze(root: Path, n_boot: int = 2000, seed: int = 0) -> dict:
     return out
 
 
+# A3.3 and A4.1. name: (arm, baseline, the points it must gain on ret_real, and on false_recall_neighbour).
+GAP_HYPOTHESES = {
+    "H10": ("B4q", "B4_replay_kl", 0.10, 0.10),
+    "H11": ("B4q_idk", "B4q", 0.0, 0.15),
+    "H12": ("B4q_compact", "B4q", 0.05, 0.0),
+    "H13": ("B4q_r8", "B4q", 0.05, 0.0),
+}
+ACQ_WITHIN = 0.05
+E1B_NIGHT_METRICS = ("acq_direct", "ret_real", "false_recall_neighbour")
+
+
+def gap_hypothesis(table: dict, arm: str, baseline: str, ret_margin: float, false_margin: float) -> dict:
+    """A gap at each setting. Testable where both arms reach `acq_direct` 0.7, as A3.3 falsifies H10 on those settings.
+
+    H11 to H13 name one gap each, and a margin of 0 for the other only asks that it is not lost.
+    """
+    rows = []
+    for setting in sorted(table):
+        left, right = table[setting].get(arm), table[setting].get(baseline)
+        if not left or not right or any(side.get(m) is None for side in (left, right) for m in E1B_NIGHT_METRICS):
+            continue
+        ret_gap = left["ret_real"] - right["ret_real"]
+        false_gap = right["false_recall_neighbour"] - left["false_recall_neighbour"]  # Lower is better, so reversed.
+        acq_gap = left["acq_direct"] - right["acq_direct"]
+        rows.append(
+            {
+                "setting": setting,
+                "ret_real_gap": ret_gap,
+                "false_recall_gap": false_gap,
+                "acq_direct_gap": acq_gap,
+                "testable": min(left["acq_direct"], right["acq_direct"]) >= pick_setting.THRESHOLD,
+                "meets": ret_gap >= ret_margin and false_gap >= false_margin and abs(acq_gap) <= ACQ_WITHIN,
+            }
+        )
+    testable = [row for row in rows if row["testable"]]
+    verdict = "not testable" if not testable else "falsified"
+    if any(row["meets"] for row in testable):
+        verdict = "not falsified"
+    return {"arm": arm, "baseline": baseline, "verdict": verdict, "rows": rows}
+
+
+def e1b_report(records: Sequence[dict]) -> Optional[dict]:
+    """Across settings: each night's three metrics, A3.4's choice, H10 to H13, and H8's AUROC. None unless E1b is here."""
+    rows = [record for record in records if record.get("experiment") == "E1b"]
+    if not rows:
+        return None
+    by_setting: dict[str, list[dict]] = {}
+    for record in rows:
+        by_setting.setdefault(record["variant"], []).append(record)
+    groups = {setting: Group(part) for setting, part in sorted(by_setting.items())}
+    nightly, audit = [], []
+    table: dict[str, dict] = {}
+    for setting, group in groups.items():
+        table[setting] = {}
+        for arm in sorted(group.cells):
+            finals = [group.final(arm, seed)["metrics"] for seed in group.seeds(arm)]
+            table[setting][arm] = {
+                m: _mean([f[m] for f in finals if f.get(m) is not None]) for m in E1B_NIGHT_METRICS
+            }
+            nights = sorted({night for by_night in group.cells[arm].values() for night in by_night})
+            for night in nights:
+                at_night = [by_night[night]["metrics"] for by_night in group.cells[arm].values() if night in by_night]
+                nightly.append(
+                    {
+                        "arm": arm,
+                        "setting": setting,
+                        "night": night,
+                        **{m: _mean([x[m] for x in at_night if x.get(m) is not None]) for m in E1B_NIGHT_METRICS},
+                    }
+                )
+        result = h8(group)
+        audit.append(
+            {
+                "setting": setting,
+                "auroc_heldout": result.get("mean_auroc_heldout"),
+                "auroc_probe": result.get("mean_auroc_probe"),
+                "within_fact_auroc": result.get("mean_within_fact_auroc"),
+            }
+        )
+    nightly.sort(key=lambda row: (row["arm"], row["setting"], row["night"]))
+    arms = sorted({arm for setting in table.values() for arm in setting})
+    choice = pick_setting.choose_setting(table)
+    return {
+        "nightly": nightly,
+        "per_arm_setting": pick_setting.best_setting_per_arm(table, arms),
+        "shared_setting": choice,
+        "upgrades": pick_setting.choose_upgrades(table, choice["setting"], choice["threshold"]) if choice else [],
+        "gaps": {name: gap_hypothesis(table, *spec) for name, spec in GAP_HYPOTHESES.items()},
+        "h8_by_setting": audit,
+    }
+
+
+def print_e1b(report: dict) -> None:
+    print("\n=== E1b, across settings (exploratory, one seed) ===")
+    print("\nEach arm, setting and night")
+    print(format_table(report["nightly"]))
+    print("\nA3.4, per arm: highest ret_real with acq_direct at least 0.7")
+    for arm, setting in report["per_arm_setting"].items():
+        print(f"  {arm}: {setting if setting is not None else 'no setting qualifies'}")
+    choice = report["shared_setting"]
+    if choice is None:
+        print("\nA3.4, shared setting: not available, since results are incomplete")
+    else:
+        relaxed = " (relaxed from 0.7)" if choice["relaxed"] else ""
+        print(
+            f"\nA3.4, chosen setting: {choice['setting']}, min ret_real {choice['min_ret_real']:.3f}, "
+            f"best sleep arm {choice['best_sleep']}, acq_direct threshold {choice['threshold']:.3f}{relaxed}"
+        )
+        print(f"A4.2, upgrades advancing: {', '.join(report['upgrades']) or 'none'}")
+    for name, entry in report["gaps"].items():
+        print(f"\n{name}: {entry['arm']} minus {entry['baseline']}: {entry['verdict']}")
+        print(format_table(entry["rows"]))
+    print("\nH8 per setting: AUROC against correctness (held-out gap is A3.7's test, 0.75)")
+    print(format_table(report["h8_by_setting"]))
+
+
 def main(argv: Optional[Sequence[str]] = None) -> None:
     parser = argparse.ArgumentParser(description="Apply the PREREG decision rule to results")
     parser.add_argument("--results", required=True)
@@ -717,6 +836,10 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         print("\nDirect accuracy by fact age, at the final night")
         print(format_table(entry["by_age"]))
         print(f"\nPilot checks: {entry['pilot']}")
+    e1b = e1b_report(load_records(Path(args.results)))
+    if e1b is not None:
+        print_e1b(e1b)
+        summary["E1b"] = e1b
     if args.json:
         Path(args.json).write_text(json.dumps(summary, indent=1, sort_keys=True), encoding="utf-8")
 

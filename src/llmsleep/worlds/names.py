@@ -86,6 +86,7 @@ class NameForge:
         self.issued: list[str] = []  # Casefolded, in issue order.
         # Issued, reserved look-alikes, and words E0 found a model knows: never handed out.
         self._all: dict[str, None] = {word.casefold(): None for word in banned}
+        self._short_spent = False
 
     def _candidate(self, short: bool) -> str:
         r = self.rng
@@ -103,13 +104,17 @@ class NameForge:
         return all(edit_distance(key, other, limit) > limit for other in self.issued)
 
     def token(self, short: bool = False, attempts: int = 20_000) -> str:
-        for _ in range(attempts):
-            word = self._candidate(short)
-            if self._acceptable(word):
-                key = word.casefold()
-                self.issued.append(key)
-                self._all[key] = None
-                return word
+        # Short words are few at this distance, so a big world can run out of them. Only then do long ones take over,
+        # which leaves every world that fits unchanged, draw for draw.
+        for shape in ((short, False) if short and not self._short_spent else (False,)):
+            for _ in range(attempts):
+                word = self._candidate(shape)
+                if self._acceptable(word):
+                    key = word.casefold()
+                    self.issued.append(key)
+                    self._all[key] = None
+                    return word
+            self._short_spent = self._short_spent or shape
         raise RuntimeError(f"could not find a new name after {attempts} attempts; lower min_distance or the world size")
 
     def near(self, word: str, attempts: int = 500) -> str:

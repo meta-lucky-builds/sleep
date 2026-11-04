@@ -39,10 +39,13 @@ from .consolidate import (
     HardExample,
     TargetSpec,
     TokenTargets,
+    build_question_frame_targets,
     build_self_sampled_targets,
     build_targets,
+    derived_examples,
     estimate_step_tokens,
     hard_examples,
+    negative_examples,
     pair_examples,
     train_loop,
 )
@@ -114,7 +117,11 @@ class State:
 
         `eos_ids` replaces the tokenizer's single EOS as the set of tokens that stop sampling.
         """
-        delta = DeltaModel(model, rank=cfg.model.rank, alpha=cfg.model.alpha)
+        rank, alpha = cfg.model.rank, cfg.model.alpha
+        if cfg.arm.rank_override is not None:
+            # The same LoRA scale, alpha / rank, so that a smaller rank is not also a larger step.
+            rank, alpha = cfg.arm.rank_override, cfg.model.alpha * cfg.arm.rank_override / cfg.model.rank
+        delta = DeltaModel(model, rank=rank, alpha=alpha)
         handle = ModelHandle(
             delta,
             tokenizer,
@@ -196,6 +203,7 @@ class NightReport:
     selection: dict = field(default_factory=dict)
     teacher: dict = field(default_factory=dict)
     train: dict = field(default_factory=dict)
+    train_extra: dict = field(default_factory=dict)  # Hard labels beyond real episodes, by how many.
     compaction: dict = field(default_factory=dict)
     decision: dict = field(default_factory=dict)
     fact_audit: dict = field(default_factory=dict)  # H8's exempt log. Nothing in a night reads it.
@@ -229,6 +237,15 @@ def active_stage_fractions(arm: ArmConfig, cfg: NightConfig) -> dict[str, float]
         # only happen if TrainConfig.max_steps is None, so that training runs until its tokens are spent.
         fractions["train"] += cfg.budget.fractions.get("signals", 0.0)
     return fractions
+
+
+def _synthesis_reserve(ledger: ComputeLedger, cfg: NightConfig, total: int, *parts: str):
+    """Keep the shares of later parts out of reach of this one. Call inside the synthesis stage; `parts` are what may
+    have been spent by the end of this one. What an earlier part leaves passes on, since the limit is cumulative."""
+    shares = cfg.queries.synthesis_shares
+    if shares is None:
+        return nullcontext()
+    return ledger.limit(int(total * sum(shares[part] for part in parts)) - ledger.spent("synthesis"))
 
 
 def _uniform_anchor_count(cfg: NightConfig, night: int, side: str, pool_size: int) -> tuple[int, str]:
@@ -407,10 +424,11 @@ def run_night(state: State, cfg: NightConfig) -> NightReport:
     pool_held: list[Candidate] = []
     query_gen = None
     synthesis_exhausted = False
+    synthesis_total = ledger.remaining("synthesis") if "synthesis" in ledger.caps else 0
     with handle.banks("committed"):
         if arm.query_source != "none":
             query_gen = make_query_gen(arm.query_source, world, handle, cfg.queries)
-            with ledger.stage("synthesis"):
+            with ledger.stage("synthesis"), _synthesis_reserve(ledger, cfg, synthesis_total, "singles"):
                 singles, synthesis_exhausted = generate_singles(query_gen, new_episodes, rng("query_singles"))
             train_cands, held_cands, held = split_heldout(
                 singles, state.world_seed, cfg.commit.heldout_frac, state.heldout
@@ -464,7 +482,7 @@ def run_night(state: State, cfg: NightConfig) -> NightReport:
         chosen_pairs: dict[str, int] = {}
         if arm.pair_contexts and query_gen is not None:
             pair_gen = PairQueryGen(query_gen, cfg.queries.max_pairs)
-            with ledger.stage("synthesis"):
+            with ledger.stage("synthesis"), _synthesis_reserve(ledger, cfg, synthesis_total, "singles", "pairs"):
                 pair_cands, pairs_exhausted = pair_gen.generate(store, new_ids, rng("query_pairs"))
             chosen_pairs = pair_gen.stats
             synthesis_exhausted = synthesis_exhausted or pairs_exhausted
@@ -641,16 +659,32 @@ def run_night(state: State, cfg: NightConfig) -> NightReport:
     integrate_targets: list[TokenTargets] = []
     anchor_targets: list[TokenTargets] = []
     teacher_exhausted = False
+    frame_stats: dict = {}
     if "teacher" in ledger.caps:
         teacher_rng = rng("teacher")
+        teacher_total = ledger.remaining("teacher")
         with ledger.stage("teacher"):
+            # Question-frame anchors take a fixed share of this stage when an arm also has a teacher, and the whole stage
+            # otherwise. On their own seed, so the rest of the stage draws what it would have without them.
+            frame_targets: list[TokenTargets] = []
+            if arm.self_sample_frame:
+                frame_budget = int(teacher_total * cfg.teacher.frame_share) if arm.teacher_kl else teacher_total
+                with ledger.limit(frame_budget):
+                    frame_targets, exhausted, frame_stats = build_question_frame_targets(
+                        handle, cfg.teacher, rng("teacher_frame")
+                    )
+                teacher_exhausted = teacher_exhausted or exhausted
+                frame_stats["tokens"] = ledger.spent("teacher")
             # Anchors first: they are few, and a stage spent on integrate targets would leave an arm with none. Without
             # a CHD filter integrate targets can fill the stage, so they go in a seeded mixed order: otherwise pairs,
             # appended last, would be what a short budget always drops, which would bias H7.
             if arm.anchors != "none":
                 specs = _anchor_specs(train_part.anchor, arm, older, cfg.select.lexical_min)
-                anchor_targets, exhausted = build_targets(handle, specs, cfg.teacher, teacher_rng, cache)
+                share = cfg.teacher.query_anchor_share
+                with ledger.limit(int(teacher_total * share)) if share is not None else nullcontext():
+                    anchor_targets, exhausted = build_targets(handle, specs, cfg.teacher, teacher_rng, cache)
                 teacher_exhausted = teacher_exhausted or exhausted
+            anchor_targets = anchor_targets + frame_targets
             if arm.teacher_kl:
                 specs = [
                     TargetSpec(c.query, c.context, "committed", "integrate", c.context_ids)
@@ -658,7 +692,7 @@ def run_night(state: State, cfg: NightConfig) -> NightReport:
                 ]
                 integrate_targets, exhausted = build_targets(handle, specs, cfg.teacher, teacher_rng, cache)
                 teacher_exhausted = teacher_exhausted or exhausted
-            if arm.self_sampled_kl:
+            if arm.self_sampled_kl and not arm.self_sample_frame:
                 self_targets, exhausted = build_self_sampled_targets(handle, cfg.teacher, teacher_rng)
                 anchor_targets += self_targets
                 teacher_exhausted = teacher_exhausted or exhausted
@@ -668,9 +702,20 @@ def run_night(state: State, cfg: NightConfig) -> NightReport:
         "anchor_sequences": len(anchor_targets),
         "exhausted": teacher_exhausted,
     }
+    if arm.self_sample_frame:
+        report.teacher["frame"] = frame_stats
 
     # ---- Stage 2, second half: training. Fresh is the only thing that moves.
     hard = hard_pool_examples(arm, store, handle, new_ids, train_part.integrate, cfg.select.hard_boost, state.heldout)
+    if arm.derived_hard:
+        derived = world.derived_facts(night)  # Each is a true statement as of tonight, never an episode.
+        hard = hard + derived_examples(handle, derived, state.heldout)
+        report.train_extra["derived_facts"] = len(derived)
+    if arm.idk_negatives:
+        count = math.ceil(cfg.train.idk_share * len(hard))
+        negatives = negative_examples(handle, store.replayable(), count, rng("idk_negatives"))
+        hard = hard + negatives
+        report.train_extra["idk_negatives"] = len(negatives)
     _release_surplus(ledger, hard, integrate_targets, anchor_targets, cfg, audit_after_need)
     with ledger.stage("train"):
         train_result = train_loop(handle, hard, integrate_targets, anchor_targets, cfg.train, rng("train"))

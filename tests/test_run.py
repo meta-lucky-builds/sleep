@@ -318,7 +318,7 @@ def _load(path):
 
 
 def test_every_experiment_has_a_config():
-    assert {p.stem for p in ALL_CONFIGS} == {f"e{i}" for i in range(7)} | {"e0b"}
+    assert {p.stem for p in ALL_CONFIGS} == {f"e{i}" for i in range(7)} | {"e0b", "e1b", "e3x.template"}
 
 
 @pytest.mark.parametrize("path", ALL_CONFIGS, ids=lambda p: p.stem)
@@ -969,6 +969,24 @@ def test_headline_is_the_pair_baseline_and_analyze_reads_a_real_run(straight_run
     assert entry["validity"][0]["acceptance"] == 1.0
     assert entry["by_age"][0]["arm"] == "B3_replay"
     assert "taught_value_bleed" in entry["table"][0] and "false_recall_any_specific" in entry["table"][0]
+
+
+def test_a_finished_cell_can_drop_its_weights_and_a_rerun_still_skips_it(tmp_path):
+    config = smoke_config(drop_finished_weights=True)
+    directory = run_cell(config, tmp_path)
+    assert not list((directory / "checkpoints").glob("night-*/adapters.pt"))
+    assert (directory / "checkpoints" / "LATEST").read_text() == "night-00002"
+    results = (directory / "results.jsonl").read_bytes()
+
+    def no_model(model_id, fp16):
+        raise AssertionError("a finished cell must not load a model")
+
+    runner.run_cell(config, only_cell(config), tmp_path, no_model, QA, "code-1", "cpu")
+    assert (directory / "results.jsonl").read_bytes() == results
+
+
+def test_weights_stay_without_the_flag_so_that_e3_and_e4_are_unaffected(straight_run):
+    assert list((straight_run / "checkpoints").glob("night-*/adapters.pt"))
 
 
 def test_a_partial_last_line_does_not_break_the_reader(tmp_path):

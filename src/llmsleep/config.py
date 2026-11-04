@@ -70,6 +70,9 @@ class QueryConfig:
     anchor_older_episodes: int = 8  # Older episodes per night to generate fresh anchor queries over.
     anchor_distractor_episodes: int = 8  # Likewise for distractor-pool episodes.
     anchor_pool_max: int = 128  # Pool size scored per night, as a uniform sample.
+    # Reserves within the synthesis stage, so that a short night still has pairs and anchors: {"singles": s, "pairs": p,
+    # "anchors": a}, summing to 1. Unused tokens pass to the later parts. None: first come, first served.
+    synthesis_shares: dict[str, float] | None = None
 
 
 @dataclass
@@ -102,6 +105,8 @@ class TeacherConfig:
     top_k: int = 64
     self_samples: int | None = None  # B4: sequences from germline. None: draw until the teacher stage is spent.
     self_max_new_tokens: int = 32
+    frame_share: float = 0.33  # Of the teacher stage, for question-frame anchors in an arm that also has a teacher.
+    query_anchor_share: float | None = None  # Most of the stage that query anchors may take. None: no limit.
 
 
 @dataclass
@@ -118,6 +123,7 @@ class TrainConfig:
     w_kl: float = 1.0
     w_anchor: float = 1.0
     gradient_checkpointing: bool = False
+    idk_share: float = 0.15  # "I don't know" examples added to the hard pool, as a share of its size (A4.1).
 
 
 @dataclass

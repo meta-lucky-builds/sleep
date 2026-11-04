@@ -1,0 +1,30 @@
+{
+  "experiment": "E1b",
+  "seed_role": "dev",
+  "model_ids": ["Qwen/Qwen2.5-0.5B"],
+  "world_seeds": [7],
+  "arms": ["B3_pairs", "B3_derived", "B4_replay_kl", "B4q", "B4q_idk", "B4q_compact", "B4q_r8", "S_core", "S_coreq", "S_oracleq"],
+  "drop_finished_weights": true,
+  "world": {"n_persons": 40, "n_orgs": 10, "n_cities": 8, "n_regions": 6, "nights": 3, "supersession_rate": 0.2, "n_distractors": 80, "n_control_persons": 10, "n_entrench": 40},
+  "night": {
+    "model": {"rank": 32, "alpha": 32.0, "batch_size": 64, "fp16": true},
+    "signals": {"k": 4, "max_new_tokens": 16, "chunk": 4},
+    "queries": {"per_episode": 3, "model_samples": 2, "model_max_new_tokens": 64, "max_pairs": 64, "synthesis_shares": {"singles": 0.5, "pairs": 0.3, "anchors": 0.2}},
+    "teacher": {"samples": 2, "max_new_tokens": 16, "top_k": 64, "self_samples": null, "self_max_new_tokens": 32, "frame_share": 0.33, "query_anchor_share": 0.34},
+    "train": {"hard_batch": 8, "kl_batch": 4, "anchor_batch": 4, "gradient_checkpointing": false, "max_steps": null},
+    "compact": {"threshold": 0.01, "max_rank": 256, "repair_steps": 20},
+    "commit": {"max_anchor_drift": 1000000000.0}
+  },
+  "variants": [
+    {"name": "lr1e-5_t50k", "night": {"train": {"lr": 0.00001}, "budget": {"night_tokens": 50000}}},
+    {"name": "lr3e-5_t50k", "night": {"train": {"lr": 0.00003}, "budget": {"night_tokens": 50000}}},
+    {"name": "lr1e-4_t50k", "night": {"train": {"lr": 0.0001}, "budget": {"night_tokens": 50000}}},
+    {"name": "lr1e-5_t150k", "night": {"train": {"lr": 0.00001}, "budget": {"night_tokens": 150000}}},
+    {"name": "lr3e-5_t150k", "night": {"train": {"lr": 0.00003}, "budget": {"night_tokens": 150000}}},
+    {"name": "lr1e-5_t400k", "night": {"train": {"lr": 0.00001}, "budget": {"night_tokens": 400000}}},
+    {"name": "lr3e-5_t400k", "night": {"train": {"lr": 0.00003}, "budget": {"night_tokens": 400000}}},
+    {"name": "lr1e-4_t150k", "night": {"train": {"lr": 0.0001}, "budget": {"night_tokens": 150000}}}
+  ],
+  "eval": {"max_new_tokens": 24, "batch_size": 64, "max_per_kind": 60, "drift_tokens": 16},
+  "capability": {"n_candidates": 3000, "n_keep": 150, "k": 8, "max_new_tokens": 24, "batch_size": 64}
+}

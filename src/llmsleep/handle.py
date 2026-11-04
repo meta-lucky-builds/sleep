@@ -29,6 +29,16 @@ class PromptFormat:
     def render(self, query: str, context: Optional[str] = None) -> str:
         return self.template.format(context=context if context else self.empty_context, query=query)
 
+    def question_open(self) -> str:
+        """A closed-book prompt up to the question: `Context: (none)\\nQuestion:` with the default template.
+
+        The space before the question is left out, since on a real tokenizer it belongs to the question's first token.
+        """
+        head, slot, _ = self.template.partition("{query}")
+        if not slot:
+            raise ValueError("the prompt template has no {query} slot")
+        return head.format(context=self.empty_context).rstrip(" ")
+
 
 def is_instruct_model(model_id: str) -> bool:
     """By the Hub naming convention. Instruct models get the chat template; base models raw completion (A1.10)."""
@@ -183,6 +193,12 @@ class ModelHandle:
         return self.tokenizer.apply_chat_template(
             [{"role": "user", "content": body}], tokenize=False, add_generation_prompt=True
         )
+
+    def question_open(self) -> str:
+        """The opening every closed-book question shares. Raw completion only: a chat turn has no such prefix."""
+        if self.prompt_format.chat:
+            raise ValueError("the question frame's opening is defined for raw completion, not a chat template")
+        return self.prompt_format.question_open()
 
     def encode_prompt(self, text: str) -> list[int]:
         return list(self.tokenizer(text, add_special_tokens=True)["input_ids"])

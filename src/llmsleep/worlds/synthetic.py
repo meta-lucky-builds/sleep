@@ -24,6 +24,7 @@ from ..eval.probes import Probe, build_probes
 from ..memory import Episode
 from .names import NameForge, SeededRng
 from .templates import (
+    TRAIN_DERIVED_TEMPLATES,
     TRAIN_PAIR_TEMPLATES,
     TRAIN_TEMPLATES,
     check_disjoint,
@@ -133,6 +134,18 @@ class ControlFact:
     text: str
     gold: tuple[str, ...]
     entities: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DerivedFact:
+    """A true composed fact as of one night, in training templates. Oracle data, and never an episode."""
+
+    kind: str  # "alias" or "two_hop".
+    key: str  # The fact it composes through: the key its version comes from.
+    value: str
+    statements: tuple[str, ...]
+    qa: tuple[tuple[str, str], ...]
+    episode_ids: tuple[str, str]  # The two facts it needs.
 
 
 class SyntheticWorld:
@@ -388,7 +401,8 @@ class SyntheticWorld:
         return out
 
     def pair_template_queries(self, a: Episode, b: Episode) -> list[str]:
-        """Two-hop queries, if the two episodes are the two links of a chain; otherwise none."""
+        """Queries needing both episodes: two-hop if they are a chain's links, alias if one is the other's subject's
+        nickname. Otherwise none."""
         first, second = self._fact_by_episode.get(a.id), self._fact_by_episode.get(b.id)
         if first is None or second is None:
             return []
@@ -397,7 +411,56 @@ class SyntheticWorld:
             if forms and x.value_id == y.subject:
                 subject = self.entities[x.subject].name
                 return [t.format(subject=subject) for t in forms]
+            alias_forms = TRAIN_DERIVED_TEMPLATES["alias"].get(y.attr)
+            if alias_forms and x.attr == "nickname" and x.subject == y.subject:
+                return [t.format(alias=x.value) for t in alias_forms["qa"]]
         return []
+
+    def derived_facts(self, night: int) -> list[DerivedFact]:
+        """True alias and two-hop facts as of `night`: both facts taught by then, each at its version as of then.
+
+        Pure, and it draws nothing, so the stream and the fingerprint do not depend on whether it is called.
+        """
+
+        def current(key: str) -> Optional[Fact]:
+            taught = [fact for fact in self._facts_by_key.get(key, []) if fact.night <= night]
+            return taught[-1] if taught else None
+
+        out: list[DerivedFact] = []
+        for key in self.fact_keys:
+            fact = current(key)
+            if fact is None:
+                continue
+            alias_forms = TRAIN_DERIVED_TEMPLATES["alias"].get(fact.attr)
+            nickname = current(f"{fact.subject}.nickname") if alias_forms else None
+            if nickname is not None:
+                fill = {"alias": nickname.value, "value": fact.value}
+                out.append(
+                    DerivedFact(
+                        "alias",
+                        key,
+                        fact.value,
+                        tuple(t.format(**fill) for t in alias_forms["statements"]),
+                        tuple((t.format(**fill), fact.value) for t in alias_forms["qa"]),
+                        (fact.episode_id, nickname.episode_id),
+                    )
+                )
+            for (first_attr, second_attr), statements in TRAIN_DERIVED_TEMPLATES["two_hop"].items():
+                second = current(f"{fact.value_id}.{second_attr}") if fact.attr == first_attr else None
+                if second is None:
+                    continue
+                subject = self.entities[fact.subject].name
+                out.append(
+                    DerivedFact(
+                        "two_hop",
+                        key,
+                        second.value,
+                        tuple(t.format(subject=subject, value=second.value) for t in statements),
+                        tuple((t.format(subject=subject), second.value) for t in self._pair_train[(first_attr, second_attr)]),
+                        (fact.episode_id, second.episode_id),
+                    )
+                )
+        return out
 
     def distractor_pool(self) -> list[Episode]:
         return list(self._distractors)

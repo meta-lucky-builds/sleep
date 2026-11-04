@@ -79,6 +79,11 @@ def job_env(slot: str, threads: int) -> dict:
 Launcher = Callable[[Job, str, Path], "subprocess.Popen"]
 
 
+def pick_slot(free: Sequence[str], busy: Sequence[str]) -> int:
+    """Index in `free` of a slot on the GPU with the fewest running cells; the earliest such slot on a tie."""
+    return min(range(len(free)), key=lambda index: (list(busy).count(free[index]), index))
+
+
 def run_pass(jobs: Sequence[Job], slots: Sequence[str], launch: Launcher, logs: Path, poll: float = 5.0) -> list[Job]:
     """Everything in `jobs`, one per slot at a time. Returns the jobs that failed."""
     pending = list(jobs)
@@ -90,7 +95,7 @@ def run_pass(jobs: Sequence[Job], slots: Sequence[str], launch: Launcher, logs: 
     while pending or running:
         while pending and free:
             job = pending.pop(0)
-            slot = free.pop(0)
+            slot = free.pop(pick_slot(free, [name.split("#", 1)[0] for name in running]))
             key = f"{slot}#{job.name}"
             running[key] = (job, launch(job, slot, logs), time.time())
             print(f"[{time.strftime('%H:%M:%S')}] start {job.name} on GPU {slot}", flush=True)

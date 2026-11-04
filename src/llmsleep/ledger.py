@@ -172,6 +172,15 @@ class ComputeLedger:
             return self.allowance - self.spent()
         return self.caps[name] - self.spent(name)
 
+    def room(self) -> Optional[int]:
+        """What the current stage can still be charged, under any `limit`. None when charges cannot raise."""
+        if self._exempt_depth or self.allowance is None:
+            return None
+        left = self.remaining()
+        if self._limit is not None and self._stage is not None:
+            left = min(left, self._limit - self.spent(self._stage))
+        return max(0, left)
+
     def summary(self) -> dict:
         """JSON-able record of the night so far."""
         return {

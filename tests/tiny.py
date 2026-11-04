@@ -179,6 +179,9 @@ class TinyWorld:
     def pair_template_queries(self, a: Episode, b: Episode) -> list[str]:
         return [f"Together, how many kites have {a.entities[0]} and {b.entities[0]}?"]
 
+    def derived_facts(self, night: int) -> list:
+        return []
+
     def distractor_pool(self) -> list[Episode]:
         return self._distractors
 

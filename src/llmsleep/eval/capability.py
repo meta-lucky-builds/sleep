@@ -110,16 +110,15 @@ def build_capability(
 
     kept: list[dict] = []
     with handle.ledger.exempt(), handle.banks("germline"), eval_batch_size(handle, cfg.batch_size):
-        answers = generate_answers(
-            handle,
-            [(row["question"], None) for row in order],
-            cfg.max_new_tokens,
-            0.0,
-            make_generator(cfg.seed, 0, "capability:greedy"),
-        )
-        for row in order:
-            if score_answer(answers[(row["question"], None)][0], row["answers"]).correct:
-                kept.append(row)
+        # In chunks, stopping when enough are kept: greedy answers draw nothing, so this keeps the same questions in order.
+        chunk = max(cfg.n_keep, cfg.batch_size)
+        greedy = make_generator(cfg.seed, 0, "capability:greedy")
+        for start in range(0, len(order), chunk):
+            rows = order[start : start + chunk]
+            answers = generate_answers(handle, [(row["question"], None) for row in rows], cfg.max_new_tokens, 0.0, greedy)
+            for row in rows:
+                if len(kept) < cfg.n_keep and score_answer(answers[(row["question"], None)][0], row["answers"]).correct:
+                    kept.append(row)
             if len(kept) >= cfg.n_keep:
                 break
         prompts = [handle.format(row["question"], None) for row in kept]
@@ -137,6 +136,19 @@ def build_capability(
     if path is not None:
         _atomic_write(path, [asdict(item) for item in out])
     return out
+
+
+def question_overlap(questions: Sequence[str], items: Sequence[CapabilityItem]) -> int:
+    """How many distinct questions a model wrote are word for word in the set: a measurement after the fact.
+
+    Germline may write a question of its own that is also a real one, and an anchor on it would protect that item
+    directly. The flow is one way: this reads a night's report, and nothing in a night can read the set.
+    """
+
+    def normal(text: str) -> str:
+        return " ".join(text.casefold().split())
+
+    return len({normal(q) for q in questions} & {normal(item.question) for item in items})
 
 
 def evaluate_capability(
