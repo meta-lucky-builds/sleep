@@ -1,0 +1,15 @@
+B0_frozen learn {'acq_direct': 0.0, 'acq_direct_lift': 0.0, 'acq_paraphrase': 0.0, 'acq_reverse': 0.0, 'acq_alias': 0.0, 'acq_twohop': 0.0, 'ret_real': 1.0, 'ret_real_head': 1.0, 'ret_real_tail': 1.0, 'ret_real_n': 60, 'false_recall_neighbour': 0.0, 'taught_value_bleed': 0.175, 'drift_generic': 0.0, 'delta_norm': 0.0}
+   counts {'alias': 40, 'direct': 40, 'false_recall': 40, 'paraphrase': 40, 'preservation': 0, 'reverse': 16, 'supersede': 0, 'two_hop': 16}
+   ledger spent 0 steps None nonfinite None loss_hard None loss_kl None accepted None frame None
+B4_replay_kl learn {'acq_direct': 0.975, 'acq_direct_lift': 0.975, 'acq_paraphrase': 1.0, 'acq_reverse': 1.0, 'acq_alias': 0.225, 'acq_twohop': 0.0, 'ret_real': 0.35, 'ret_real_head': 0.367, 'ret_real_tail': 0.333, 'ret_real_n': 60, 'false_recall_neighbour': 0.925, 'taught_value_bleed': 1.0, 'drift_generic': 0.063, 'delta_norm': 7.594}
+   counts {'alias': 40, 'direct': 40, 'false_recall': 40, 'paraphrase': 40, 'preservation': 0, 'reverse': 16, 'supersede': 0, 'two_hop': 16}
+   ledger spent 199678 steps 270 nonfinite 0 loss_hard 0.4606316089630127 loss_kl 0.0 accepted True frame None
+B4q learn {'acq_direct': 0.95, 'acq_direct_lift': 0.925, 'acq_paraphrase': 0.95, 'acq_reverse': 1.0, 'acq_alias': 0.25, 'acq_twohop': 0.0, 'ret_real': 0.667, 'ret_real_head': 0.733, 'ret_real_tail': 0.6, 'ret_real_n': 60, 'false_recall_neighbour': 0.975, 'taught_value_bleed': 1.0, 'drift_generic': 0.243, 'delta_norm': 7.454}
+   counts {'alias': 40, 'direct': 40, 'false_recall': 40, 'paraphrase': 40, 'preservation': 0, 'reverse': 16, 'supersede': 0, 'two_hop': 16}
+   ledger spent 199548 steps 257 nonfinite 0 loss_hard 0.3411400020122528 loss_kl 0.0 accepted True frame 0
+B4q near_zero {'acq_direct': 0.0, 'acq_direct_lift': 0.0, 'acq_paraphrase': 0.0, 'acq_reverse': 0.0, 'acq_alias': 0.0, 'acq_twohop': 0.0, 'ret_real': 0.917, 'ret_real_head': 0.967, 'ret_real_tail': 0.867, 'ret_real_n': 60, 'false_recall_neighbour': 0.0, 'taught_value_bleed': 0.175, 'drift_generic': 0.0, 'delta_norm': 0.014}
+   counts {'alias': 40, 'direct': 40, 'false_recall': 40, 'paraphrase': 40, 'preservation': 0, 'reverse': 16, 'supersede': 0, 'two_hop': 16}
+   ledger spent 19777 steps 25 nonfinite 0 loss_hard 7.078719615936279 loss_kl 0.0 accepted True frame 0
+B4qd learn {'acq_direct': 0.925, 'acq_direct_lift': 0.875, 'acq_paraphrase': 0.875, 'acq_reverse': 0.812, 'acq_alias': 0.8, 'acq_twohop': 0.5, 'ret_real': 0.667, 'ret_real_head': 0.8, 'ret_real_tail': 0.533, 'ret_real_n': 60, 'false_recall_neighbour': 0.9, 'taught_value_bleed': 1.0, 'drift_generic': 0.247, 'delta_norm': 7.477}
+   counts {'alias': 40, 'direct': 40, 'false_recall': 40, 'paraphrase': 40, 'preservation': 0, 'reverse': 16, 'supersede': 0, 'two_hop': 16}
+   ledger spent 199924 steps 256 nonfinite 0 loss_hard 0.3978009819984436 loss_kl 0.0 accepted True frame 0
