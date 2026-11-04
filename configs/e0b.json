@@ -5,7 +5,7 @@
   "world_seeds": [8, 9],
   "world": {"n_persons": 45, "n_orgs": 8, "n_cities": 8, "n_regions": 6, "nights": 1, "supersession_rate": 0.0, "n_distractors": 80, "n_control_persons": 4, "n_entrench": 0},
   "fp16": false,
-  "batch_size": 16,
+  "batch_size": 64,
   "k": 4,
   "chd_tokens": 16,
   "chd_mix_k": 2,
