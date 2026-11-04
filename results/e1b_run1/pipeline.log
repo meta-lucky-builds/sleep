@@ -1,0 +1,273 @@
+[08:15:00] Setting up the environment
+torch 2.15.0+cu132 built for cuda 13.2 torch.cuda.is_available() True
+allocation and matmul on cuda:0 passed
+torch 2.15.0+cu132 cuda 13.2
+0 NVIDIA GeForce RTX 5090
+1 NVIDIA GeForce RTX 5090
+2 NVIDIA GeForce RTX 5090
+3 NVIDIA GeForce RTX 5090
+index, name, memory.total [MiB], memory.used [MiB]
+0, NVIDIA GeForce RTX 5090, 32607 MiB, 2 MiB
+1, NVIDIA GeForce RTX 5090, 32607 MiB, 2 MiB
+2, NVIDIA GeForce RTX 5090, 32607 MiB, 2 MiB
+3, NVIDIA GeForce RTX 5090, 32607 MiB, 2 MiB
+overlay         239G  8.7G  231G   4% /
+[08:17:17] PER_GPU=5, computed: the smallest GPU has 32 GB (under 16: 2, up to 31: 3, 32-63: 5, 64 or more: 6)
+[08:17:17] THREADS=12, computed: max(2, 256 CPUs / 20 slots)
+[08:17:17] Stage e1b+e3x, 4 GPUs, 5 cells per GPU, 12 threads per cell, git b1da143
+[08:17:17] GPU smoke test
+[08:18:10] Smoke test passed
+[08:18:10] E0b skipped: results/e0b/e0b_confirm.json is committed, and A2.3 allows one test. Every slot goes to the stage.
+[08:18:10] e1b starts on slots 0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3
+[08:18:10] start lr1e-5_t50k__B3_pairs__seed-7 on GPU 0
+[08:22:55] ok lr1e-5_t50k__B3_pairs__seed-7 in 4.8 min; 1/1 done, roughly 0 min left
+[08:22:55] start lr1e-5_t50k__B3_derived__seed-7 on GPU 0
+[08:22:55] start lr1e-5_t50k__B4_replay_kl__seed-7 on GPU 1
+[08:22:55] start lr1e-5_t50k__B4q__seed-7 on GPU 2
+[08:22:55] start lr1e-5_t50k__B4q_idk__seed-7 on GPU 3
+[08:22:55] start lr1e-5_t50k__B4q_compact__seed-7 on GPU 0
+[08:22:55] start lr1e-5_t50k__B4q_r8__seed-7 on GPU 1
+[08:22:55] start lr1e-5_t50k__S_core__seed-7 on GPU 2
+[08:22:55] start lr1e-5_t50k__S_coreq__seed-7 on GPU 3
+[08:22:55] start lr1e-5_t50k__S_oracleq__seed-7 on GPU 0
+[08:22:55] start lr3e-5_t50k__B3_pairs__seed-7 on GPU 1
+[08:22:55] start lr3e-5_t50k__B3_derived__seed-7 on GPU 2
+[08:22:55] start lr3e-5_t50k__B4_replay_kl__seed-7 on GPU 3
+[08:22:55] start lr3e-5_t50k__B4q__seed-7 on GPU 0
+[08:22:55] start lr3e-5_t50k__B4q_idk__seed-7 on GPU 1
+[08:22:55] start lr3e-5_t50k__B4q_compact__seed-7 on GPU 2
+[08:22:55] start lr3e-5_t50k__B4q_r8__seed-7 on GPU 3
+[08:22:55] start lr3e-5_t50k__S_core__seed-7 on GPU 0
+[08:22:55] start lr3e-5_t50k__S_coreq__seed-7 on GPU 1
+[08:22:55] start lr3e-5_t50k__S_oracleq__seed-7 on GPU 2
+[08:22:55] start lr1e-4_t50k__B3_pairs__seed-7 on GPU 3
+[08:24:45] FAILED (1) lr1e-5_t50k__S_coreq__seed-7 in 1.8 min; 1/79 done, roughly 143 min left
+[08:24:45] FAILED (1) lr3e-5_t50k__S_coreq__seed-7 in 1.8 min; 2/79 done, roughly 71 min left
+[08:24:50] start lr1e-4_t50k__B3_derived__seed-7 on GPU 3
+[08:24:50] start lr1e-4_t50k__B4_replay_kl__seed-7 on GPU 1
+[08:25:20] ok lr1e-4_t50k__B3_pairs__seed-7 in 2.4 min; 3/79 done, roughly 61 min left
+[08:25:20] FAILED (1) lr1e-4_t50k__B4_replay_kl__seed-7 in 0.5 min; 4/79 done, roughly 45 min left
+[08:25:25] start lr1e-4_t50k__B4q__seed-7 on GPU 3
+[08:25:25] start lr1e-4_t50k__B4q_idk__seed-7 on GPU 1
+[08:25:25] ok lr3e-5_t50k__B3_pairs__seed-7 in 2.5 min; 5/79 done, roughly 37 min left
+[08:25:25] ok lr3e-5_t50k__B3_derived__seed-7 in 2.5 min; 6/79 done, roughly 30 min left
+[08:25:30] start lr1e-4_t50k__B4q_compact__seed-7 on GPU 1
+[08:25:30] start lr1e-4_t50k__B4q_r8__seed-7 on GPU 2
+[08:25:35] ok lr1e-5_t50k__B3_derived__seed-7 in 2.7 min; 7/79 done, roughly 27 min left
+[08:25:40] start lr1e-4_t50k__S_core__seed-7 on GPU 0
+[08:26:15] ok lr3e-5_t50k__B4_replay_kl__seed-7 in 3.3 min; 8/79 done, roughly 30 min left
+[08:26:20] start lr1e-4_t50k__S_coreq__seed-7 on GPU 3
+[08:26:25] ok lr1e-5_t50k__B4_replay_kl__seed-7 in 3.5 min; 9/79 done, roughly 27 min left
+[08:26:30] start lr1e-4_t50k__S_oracleq__seed-7 on GPU 1
+[08:27:00] ok lr1e-5_t50k__B4q_r8__seed-7 in 4.1 min; 10/79 done, roughly 28 min left
+[08:27:00] ok lr3e-5_t50k__B4q__seed-7 in 4.1 min; 11/79 done, roughly 25 min left
+[08:27:00] ok lr3e-5_t50k__B4q_r8__seed-7 in 4.1 min; 12/79 done, roughly 23 min left
+[08:27:05] start lr1e-5_t150k__B3_pairs__seed-7 on GPU 1
+[08:27:05] start lr1e-5_t150k__B3_derived__seed-7 on GPU 0
+[08:27:05] start lr1e-5_t150k__B4_replay_kl__seed-7 on GPU 3
+[08:27:05] ok lr3e-5_t50k__B4q_idk__seed-7 in 4.2 min; 13/79 done, roughly 21 min left
+[08:27:10] start lr1e-5_t150k__B4q__seed-7 on GPU 1
+[08:27:10] ok lr1e-5_t50k__B4q__seed-7 in 4.3 min; 14/79 done, roughly 20 min left
+[08:27:10] ok lr1e-5_t50k__B4q_idk__seed-7 in 4.3 min; 15/79 done, roughly 18 min left
+[08:27:10] ok lr1e-4_t50k__B3_derived__seed-7 in 2.3 min; 16/79 done, roughly 17 min left
+[08:27:15] start lr1e-5_t150k__B4q_idk__seed-7 on GPU 3
+[08:27:15] start lr1e-5_t150k__B4q_compact__seed-7 on GPU 2
+[08:27:15] start lr1e-5_t150k__B4q_r8__seed-7 on GPU 3
+[08:27:20] ok lr1e-5_t50k__B4q_compact__seed-7 in 4.4 min; 17/79 done, roughly 16 min left
+[08:27:20] ok lr3e-5_t50k__B4q_compact__seed-7 in 4.4 min; 18/79 done, roughly 15 min left
+[08:27:25] start lr1e-5_t150k__S_core__seed-7 on GPU 0
+[08:27:25] start lr1e-5_t150k__S_coreq__seed-7 on GPU 2
+[08:28:25] ok lr1e-5_t50k__S_oracleq__seed-7 in 5.5 min; 19/79 done, roughly 17 min left
+[08:28:30] start lr1e-5_t150k__S_oracleq__seed-7 on GPU 0
+[08:28:35] ok lr3e-5_t50k__S_oracleq__seed-7 in 5.7 min; 20/79 done, roughly 17 min left
+[08:28:40] start lr3e-5_t150k__B3_pairs__seed-7 on GPU 2
+[08:29:30] ok lr1e-4_t50k__B4q_idk__seed-7 in 4.1 min; 21/79 done, roughly 18 min left
+[08:29:35] start lr3e-5_t150k__B3_derived__seed-7 on GPU 1
+[08:29:35] ok lr1e-4_t50k__B4q_r8__seed-7 in 4.1 min; 22/79 done, roughly 17 min left
+[08:29:40] start lr3e-5_t150k__B4_replay_kl__seed-7 on GPU 2
+[08:29:40] ok lr1e-4_t50k__B4q__seed-7 in 4.3 min; 23/79 done, roughly 16 min left
+[08:29:45] start lr3e-5_t150k__B4q__seed-7 on GPU 3
+[08:29:50] ok lr1e-4_t50k__B4q_compact__seed-7 in 4.3 min; 24/79 done, roughly 16 min left
+[08:29:55] start lr3e-5_t150k__B4q_idk__seed-7 on GPU 1
+[08:31:50] ok lr1e-4_t50k__S_oracleq__seed-7 in 5.3 min; 25/79 done, roughly 19 min left
+[08:31:55] start lr3e-5_t150k__B4q_compact__seed-7 on GPU 1
+[08:32:00] FAILED (1) lr1e-5_t150k__S_coreq__seed-7 in 4.6 min; 26/79 done, roughly 19 min left
+[08:32:05] start lr3e-5_t150k__B4q_r8__seed-7 on GPU 2
+[08:32:30] FAILED (1) lr3e-5_t150k__B4q__seed-7 in 2.8 min; 27/79 done, roughly 18 min left
+[08:32:35] start lr3e-5_t150k__S_core__seed-7 on GPU 3
+[08:32:50] ok lr1e-5_t150k__B3_pairs__seed-7 in 5.8 min; 28/79 done, roughly 18 min left
+[08:32:55] start lr3e-5_t150k__S_coreq__seed-7 on GPU 1
+[08:33:05] ok lr1e-5_t150k__B3_derived__seed-7 in 6.0 min; 29/79 done, roughly 18 min left
+[08:33:10] start lr3e-5_t150k__S_oracleq__seed-7 on GPU 0
+[08:34:15] ok lr3e-5_t150k__B3_pairs__seed-7 in 5.6 min; 30/79 done, roughly 19 min left
+[08:34:20] start lr1e-4_t150k__B3_pairs__seed-7 on GPU 2
+[08:34:30] ok lr1e-4_t50k__S_coreq__seed-7 in 8.2 min; 31/79 done, roughly 18 min left
+[08:34:35] start lr1e-4_t150k__B3_derived__seed-7 on GPU 3
+[08:35:00] ok lr1e-5_t150k__B4_replay_kl__seed-7 in 7.9 min; 32/79 done, roughly 18 min left
+[08:35:05] start lr1e-4_t150k__B4_replay_kl__seed-7 on GPU 3
+[08:35:35] ok lr3e-5_t150k__B3_derived__seed-7 in 6.0 min; 33/79 done, roughly 18 min left
+[08:35:40] start lr1e-4_t150k__B4q__seed-7 on GPU 1
+[08:35:50] FAILED (1) lr3e-5_t150k__S_oracleq__seed-7 in 2.7 min; 34/79 done, roughly 17 min left
+[08:35:55] start lr1e-4_t150k__B4q_idk__seed-7 on GPU 0
+[08:36:00] FAILED (1) lr1e-4_t150k__B3_pairs__seed-7 in 1.7 min; 35/79 done, roughly 16 min left
+[08:36:05] start lr1e-4_t150k__B4q_compact__seed-7 on GPU 2
+[08:37:00] FAILED (1) lr1e-4_t150k__B4q_compact__seed-7 in 0.9 min; 36/79 done, roughly 17 min left
+[08:37:06] start lr1e-4_t150k__B4q_r8__seed-7 on GPU 2
+[08:37:11] ok lr1e-5_t150k__B4q_idk__seed-7 in 9.9 min; 37/79 done, roughly 16 min left
+[08:37:16] start lr1e-4_t150k__S_core__seed-7 on GPU 3
+[08:37:16] ok lr1e-5_t150k__B4q_r8__seed-7 in 10.0 min; 38/79 done, roughly 15 min left
+[08:37:21] start lr1e-4_t150k__S_coreq__seed-7 on GPU 3
+[08:37:21] ok lr1e-5_t150k__B4q__seed-7 in 10.2 min; 39/79 done, roughly 15 min left
+[08:37:26] start lr1e-4_t150k__S_oracleq__seed-7 on GPU 1
+[08:37:26] ok lr1e-5_t150k__B4q_compact__seed-7 in 10.2 min; 40/79 done, roughly 14 min left
+[08:37:31] start lr1e-5_t400k__B3_pairs__seed-7 on GPU 2
+[08:37:41] ok lr3e-5_t150k__B4_replay_kl__seed-7 in 8.0 min; 41/79 done, roughly 14 min left
+[08:37:46] start lr1e-5_t400k__B3_derived__seed-7 on GPU 2
+[08:37:51] ok lr1e-5_t150k__S_oracleq__seed-7 in 9.3 min; 42/79 done, roughly 13 min left
+[08:37:56] start lr1e-5_t400k__B4_replay_kl__seed-7 on GPU 0
+[08:38:26] FAILED (1) lr1e-4_t150k__B4q_idk__seed-7 in 2.5 min; 43/79 done, roughly 13 min left
+[08:38:31] start lr1e-5_t400k__B4q__seed-7 on GPU 0
+[08:39:56] ok lr3e-5_t150k__B4q_idk__seed-7 in 10.0 min; 44/79 done, roughly 14 min left
+[08:40:01] start lr1e-5_t400k__B4q_idk__seed-7 on GPU 1
+[08:40:16] ok lr1e-4_t150k__B3_derived__seed-7 in 5.7 min; 45/79 done, roughly 13 min left
+[08:40:21] start lr1e-5_t400k__B4q_compact__seed-7 on GPU 3
+[08:41:36] ok lr3e-5_t150k__B4q_compact__seed-7 in 9.7 min; 46/79 done, roughly 13 min left
+[08:41:36] FAILED (1) lr1e-5_t400k__B3_derived__seed-7 in 3.8 min; 47/79 done, roughly 13 min left
+[08:41:41] start lr1e-5_t400k__B4q_r8__seed-7 on GPU 1
+[08:41:41] start lr1e-5_t400k__S_core__seed-7 on GPU 2
+[08:41:51] ok lr3e-5_t150k__B4q_r8__seed-7 in 9.8 min; 48/79 done, roughly 12 min left
+[08:41:56] start lr1e-5_t400k__S_coreq__seed-7 on GPU 2
+[08:42:01] ok lr1e-5_t50k__S_core__seed-7 in 19.1 min; 49/79 done, roughly 12 min left
+[08:42:06] start lr1e-5_t400k__S_oracleq__seed-7 on GPU 2
+[08:42:31] ok lr3e-5_t50k__S_core__seed-7 in 19.6 min; 50/79 done, roughly 11 min left
+[08:42:36] start lr3e-5_t400k__B3_pairs__seed-7 on GPU 0
+[08:42:46] ok lr1e-4_t150k__B4_replay_kl__seed-7 in 7.7 min; 51/79 done, roughly 11 min left
+[08:42:51] start lr3e-5_t400k__B3_derived__seed-7 on GPU 3
+[08:43:51] ok lr1e-4_t50k__S_core__seed-7 in 18.2 min; 52/79 done, roughly 11 min left
+[08:43:56] start lr3e-5_t400k__B4_replay_kl__seed-7 on GPU 0
+[08:45:21] ok lr1e-4_t150k__B4q__seed-7 in 9.7 min; 53/79 done, roughly 11 min left
+[08:45:26] start lr3e-5_t400k__B4q__seed-7 on GPU 1
+[08:46:11] FAILED (1) lr3e-5_t400k__B3_pairs__seed-7 in 3.6 min; 54/79 done, roughly 11 min left
+[08:46:16] start lr3e-5_t400k__B4q_idk__seed-7 on GPU 0
+[08:47:01] ok lr1e-4_t150k__S_oracleq__seed-7 in 9.6 min; 55/79 done, roughly 11 min left
+[08:47:06] start lr3e-5_t400k__B4q_compact__seed-7 on GPU 1
+[08:47:06] ok lr1e-4_t150k__B4q_r8__seed-7 in 10.0 min; 56/79 done, roughly 10 min left
+[08:47:11] start lr3e-5_t400k__B4q_r8__seed-7 on GPU 2
+[08:47:11] FAILED (1) lr3e-5_t400k__B4q_idk__seed-7 in 0.9 min; 57/79 done, roughly 9 min left
+[08:47:16] start lr3e-5_t400k__S_core__seed-7 on GPU 0
+[08:47:51] FAILED (1) lr1e-5_t400k__B4q_compact__seed-7 in 7.5 min; 58/79 done, roughly 9 min left
+[08:47:56] start lr3e-5_t400k__S_coreq__seed-7 on GPU 3
+[08:50:31] ok lr1e-5_t400k__B3_pairs__seed-7 in 13.0 min; 59/79 done, roughly 9 min left
+[08:50:36] start lr3e-5_t400k__S_oracleq__seed-7 on GPU 2
+[08:51:46] ok lr3e-5_t150k__S_coreq__seed-7 in 18.8 min; 60/79 done, roughly 9 min left
+[08:54:01] FAILED (1) lr1e-5_t400k__B4q__seed-7 in 15.5 min; 61/79 done, roughly 9 min left
+[08:55:01] FAILED (1) lr3e-5_t400k__B4q_r8__seed-7 in 7.8 min; 62/79 done, roughly 9 min left
+[08:56:21] ok lr3e-5_t400k__B3_derived__seed-7 in 13.5 min; 63/79 done, roughly 8 min left
+[08:56:51] ok lr1e-5_t400k__B4_replay_kl__seed-7 in 18.9 min; 64/79 done, roughly 8 min left
+[08:57:46] ok lr1e-4_t150k__S_coreq__seed-7 in 20.4 min; 65/79 done, roughly 8 min left
+[08:58:31] ok lr1e-5_t400k__S_oracleq__seed-7 in 16.4 min; 66/79 done, roughly 7 min left
+[08:59:01] ok lr1e-5_t150k__S_core__seed-7 in 31.6 min; 67/79 done, roughly 6 min left
+[09:00:01] ok lr3e-5_t150k__S_core__seed-7 in 27.4 min; 68/79 done, roughly 6 min left
+[09:02:36] ok lr3e-5_t400k__B4_replay_kl__seed-7 in 18.7 min; 69/79 done, roughly 6 min left
+[09:03:11] ok lr1e-5_t400k__B4q_idk__seed-7 in 23.2 min; 70/79 done, roughly 5 min left
+[09:05:01] ok lr1e-5_t400k__B4q_r8__seed-7 in 23.3 min; 71/79 done, roughly 5 min left
+[09:07:06] ok lr3e-5_t400k__S_oracleq__seed-7 in 16.5 min; 72/79 done, roughly 4 min left
+[09:08:36] ok lr3e-5_t400k__B4q__seed-7 in 23.2 min; 73/79 done, roughly 4 min left
+[09:09:06] ok lr3e-5_t400k__B4q_compact__seed-7 in 22.0 min; 74/79 done, roughly 3 min left
+[09:09:26] ok lr1e-4_t150k__S_core__seed-7 in 32.2 min; 75/79 done, roughly 2 min left
+[09:16:31] ok lr1e-5_t400k__S_coreq__seed-7 in 34.6 min; 76/79 done, roughly 2 min left
+[09:23:41] ok lr3e-5_t400k__S_coreq__seed-7 in 35.8 min; 77/79 done, roughly 2 min left
+[09:25:31] ok lr1e-5_t400k__S_core__seed-7 in 43.8 min; 78/79 done, roughly 1 min left
+[09:29:11] ok lr3e-5_t400k__S_core__seed-7 in 41.9 min; 79/79 done, roughly 0 min left
+15 failed; retrying with one job per GPU
+[09:29:11] start lr1e-5_t50k__S_coreq__seed-7 on GPU 0
+[09:29:11] start lr3e-5_t50k__S_coreq__seed-7 on GPU 1
+[09:29:11] start lr1e-4_t50k__B4_replay_kl__seed-7 on GPU 2
+[09:29:11] start lr1e-5_t150k__S_coreq__seed-7 on GPU 3
+[09:32:06] ok lr1e-4_t50k__B4_replay_kl__seed-7 in 2.9 min; 1/15 done, roughly 41 min left
+[09:32:11] start lr3e-5_t150k__B4q__seed-7 on GPU 2
+[09:36:11] ok lr3e-5_t50k__S_coreq__seed-7 in 7.0 min; 2/15 done, roughly 46 min left
+[09:36:16] start lr3e-5_t150k__S_oracleq__seed-7 on GPU 1
+[09:36:16] ok lr1e-5_t50k__S_coreq__seed-7 in 7.1 min; 3/15 done, roughly 28 min left
+[09:36:21] start lr1e-4_t150k__B3_pairs__seed-7 on GPU 0
+[09:41:01] ok lr3e-5_t150k__B4q__seed-7 in 8.8 min; 4/15 done, roughly 33 min left
+[09:41:06] start lr1e-4_t150k__B4q_compact__seed-7 on GPU 2
+[09:41:36] ok lr1e-4_t150k__B3_pairs__seed-7 in 5.3 min; 5/15 done, roughly 25 min left
+[09:41:41] start lr1e-4_t150k__B4q_idk__seed-7 on GPU 0
+[09:43:46] ok lr3e-5_t150k__S_oracleq__seed-7 in 7.5 min; 6/15 done, roughly 22 min left
+[09:43:51] start lr1e-5_t400k__B3_derived__seed-7 on GPU 1
+[09:46:06] ok lr1e-5_t150k__S_coreq__seed-7 in 16.9 min; 7/15 done, roughly 19 min left
+[09:46:11] start lr3e-5_t400k__B3_pairs__seed-7 on GPU 3
+[09:49:46] ok lr1e-4_t150k__B4q_compact__seed-7 in 8.7 min; 8/15 done, roughly 18 min left
+[09:49:51] start lr3e-5_t400k__B4q_idk__seed-7 on GPU 2
+[09:50:26] ok lr1e-4_t150k__B4q_idk__seed-7 in 8.8 min; 9/15 done, roughly 14 min left
+[09:50:31] start lr1e-5_t400k__B4q_compact__seed-7 on GPU 0
+[09:55:26] ok lr1e-5_t400k__B3_derived__seed-7 in 11.6 min; 10/15 done, roughly 13 min left
+[09:55:31] start lr1e-5_t400k__B4q__seed-7 on GPU 1
+[09:57:31] ok lr3e-5_t400k__B3_pairs__seed-7 in 11.3 min; 11/15 done, roughly 10 min left
+[09:57:36] start lr3e-5_t400k__B4q_r8__seed-7 on GPU 3
+[10:11:06] ok lr1e-5_t400k__B4q__seed-7 in 15.6 min; 12/15 done, roughly 10 min left
+[10:11:21] ok lr1e-5_t400k__B4q_compact__seed-7 in 20.8 min; 13/15 done, roughly 6 min left
+[10:11:36] ok lr3e-5_t400k__B4q_idk__seed-7 in 21.8 min; 14/15 done, roughly 3 min left
+[10:20:01] ok lr3e-5_t400k__B4q_r8__seed-7 in 22.4 min; 15/15 done, roughly 0 min left
+[10:20:01] e1b scheduler exited with 0
+acq_direct threshold: 0.183 (relaxed from 0.7: no setting reached it on all three)
+Settings where B3_pairs, B4_replay_kl and a sleep arm all clear it:
+  lr1e-4_t150k: min ret_real 0.100, best sleep arm S_core
+Chosen: lr1e-4_t150k, which has the highest minimum ret_real (0.100).
+Upgrades at that setting:
+  B4q_idk: acq_direct 0.033, ret_real 0.680, false_recall_neighbour 0.083: does not advance
+  B4q_compact: acq_direct 0.150, ret_real 0.753, false_recall_neighbour 0.100: does not advance
+  B4q_r8: acq_direct 0.083, ret_real 0.660, false_recall_neighbour 0.067: does not advance
+WARNING: only 0 upgrades qualify, and A4.2 asks for 2. E3x runs with those.
+Wrote runs/e3x.config.json: arms B3_pairs, B4_replay_kl, B4q, S_core, S_coreq
+[10:20:06] pick_setting chose E3x's setting
+[10:20:06] e3x starts on slots 0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3
+[10:20:06] start default__B3_pairs__seed-2001 on GPU 0
+[10:37:11] ok default__B3_pairs__seed-2001 in 17.1 min; 1/1 done, roughly 0 min left
+[10:37:11] start default__B4_replay_kl__seed-2001 on GPU 0
+[10:37:11] start default__B4q__seed-2001 on GPU 1
+[10:37:11] start default__S_core__seed-2001 on GPU 2
+[10:37:11] start default__S_coreq__seed-2001 on GPU 3
+[10:37:11] start default__B3_pairs__seed-2002 on GPU 0
+[10:37:11] start default__B4_replay_kl__seed-2002 on GPU 1
+[10:37:11] start default__B4q__seed-2002 on GPU 2
+[10:37:11] start default__S_core__seed-2002 on GPU 3
+[10:37:11] start default__S_coreq__seed-2002 on GPU 0
+[10:37:11] start default__B3_pairs__seed-2003 on GPU 1
+[10:37:11] start default__B4_replay_kl__seed-2003 on GPU 2
+[10:37:11] start default__B4q__seed-2003 on GPU 3
+[10:37:11] start default__S_core__seed-2003 on GPU 0
+[10:37:11] start default__S_coreq__seed-2003 on GPU 1
+[10:37:11] start default__B3_pairs__seed-2004 on GPU 2
+[10:37:11] start default__B4_replay_kl__seed-2004 on GPU 3
+[10:37:11] start default__B4q__seed-2004 on GPU 0
+[10:37:11] start default__S_core__seed-2004 on GPU 1
+[10:37:11] start default__S_coreq__seed-2004 on GPU 2
+[10:37:11] start default__B3_pairs__seed-2005 on GPU 3
+[10:42:26] FAILED (1) default__S_coreq__seed-2003 in 5.3 min; 1/24 done, roughly 121 min left
+[10:42:31] start default__B4_replay_kl__seed-2005 on GPU 1
+[10:42:36] FAILED (1) default__S_coreq__seed-2001 in 5.4 min; 2/24 done, roughly 60 min left
+[10:42:36] FAILED (1) default__S_coreq__seed-2002 in 5.4 min; 3/24 done, roughly 38 min left
+[10:42:41] start default__B4q__seed-2005 on GPU 3
+[10:42:41] start default__S_core__seed-2005 on GPU 0
+[10:43:01] FAILED (1) default__B4_replay_kl__seed-2005 in 0.5 min; 4/24 done, roughly 29 min left
+[10:43:06] start default__S_coreq__seed-2005 on GPU 1
+[10:45:21] FAILED (1) default__B4q__seed-2005 in 2.7 min; 5/24 done, roughly 31 min left
+[10:46:36] FAILED (1) default__S_coreq__seed-2005 in 3.5 min; 6/24 done, roughly 28 min left
+[10:47:26] FAILED (1) default__S_core__seed-2005 in 4.8 min; 7/24 done, roughly 25 min left
+[10:47:51] FAILED (1) default__S_coreq__seed-2004 in 10.7 min; 8/24 done, roughly 21 min left
+[10:56:06] ok default__B3_pairs__seed-2002 in 18.9 min; 9/24 done, roughly 32 min left
+[10:56:11] ok default__B3_pairs__seed-2004 in 19.0 min; 10/24 done, roughly 27 min left
+[10:56:21] ok default__B3_pairs__seed-2005 in 19.2 min; 11/24 done, roughly 23 min left
+[10:56:36] ok default__B3_pairs__seed-2003 in 19.4 min; 12/24 done, roughly 19 min left
+[11:02:31] ok default__B4_replay_kl__seed-2002 in 25.3 min; 13/24 done, roughly 21 min left
+[11:02:46] ok default__B4_replay_kl__seed-2003 in 25.6 min; 14/24 done, roughly 18 min left
+[11:02:56] ok default__B4_replay_kl__seed-2001 in 25.8 min; 15/24 done, roughly 15 min left
+[11:03:26] ok default__B4_replay_kl__seed-2004 in 26.3 min; 16/24 done, roughly 13 min left
+[11:09:01] ok default__B4q__seed-2001 in 31.8 min; 17/24 done, roughly 13 min left
+[11:09:36] ok default__B4q__seed-2002 in 32.4 min; 18/24 done, roughly 11 min left
+[11:10:01] ok default__B4q__seed-2003 in 32.8 min; 19/24 done, roughly 9 min left
+[11:10:21] ok default__B4q__seed-2004 in 33.2 min; 20/24 done, roughly 7 min left
+[12:02:57] ok default__S_core__seed-2001 in 85.8 min; 21/24 done, roughly 12 min left
+[12:12:07] ok default__S_core__seed-2003 in 94.9 min; 22/24 done, roughly 9 min left

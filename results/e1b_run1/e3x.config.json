@@ -1,0 +1,106 @@
+{
+ "arms": [
+  "B3_pairs",
+  "B4_replay_kl",
+  "B4q",
+  "S_core",
+  "S_coreq"
+ ],
+ "capability": {
+  "batch_size": 64,
+  "k": 8,
+  "max_new_tokens": 24,
+  "n_candidates": 3000,
+  "n_keep": 150
+ },
+ "drop_finished_weights": true,
+ "eval": {
+  "batch_size": 64,
+  "drift_tokens": 16,
+  "max_new_tokens": 24,
+  "max_per_kind": 60
+ },
+ "experiment": "E3x",
+ "model_ids": [
+  "Qwen/Qwen2.5-0.5B"
+ ],
+ "night": {
+  "budget": {
+   "night_tokens": 150000
+  },
+  "commit": {
+   "max_anchor_drift": 1000000000.0
+  },
+  "compact": {
+   "max_rank": 256,
+   "repair_steps": 20,
+   "threshold": 0.01
+  },
+  "fact_audit": {
+   "panel": 100
+  },
+  "model": {
+   "alpha": 32.0,
+   "batch_size": 64,
+   "fp16": true,
+   "rank": 32
+  },
+  "queries": {
+   "max_pairs": 64,
+   "model_max_new_tokens": 64,
+   "model_samples": 2,
+   "per_episode": 3,
+   "synthesis_shares": {
+    "anchors": 0.2,
+    "pairs": 0.3,
+    "singles": 0.5
+   }
+  },
+  "signals": {
+   "chunk": 4,
+   "k": 4,
+   "max_new_tokens": 16
+  },
+  "teacher": {
+   "frame_share": 0.33,
+   "max_new_tokens": 16,
+   "query_anchor_share": 0.34,
+   "samples": 2,
+   "self_max_new_tokens": 32,
+   "self_samples": null,
+   "top_k": 64
+  },
+  "train": {
+   "anchor_batch": 4,
+   "gradient_checkpointing": false,
+   "hard_batch": 8,
+   "kl_batch": 4,
+   "lr": 0.0001,
+   "max_steps": null
+  }
+ },
+ "picked": {
+  "setting": "lr1e-4_t150k",
+  "threshold": 0.18333333333333332,
+  "upgrades": []
+ },
+ "seed_role": "exploratory",
+ "world": {
+  "n_cities": 27,
+  "n_control_persons": 10,
+  "n_distractors": 80,
+  "n_entrench": 40,
+  "n_orgs": 33,
+  "n_persons": 133,
+  "n_regions": 20,
+  "nights": 10,
+  "supersession_rate": 0.2
+ },
+ "world_seeds": [
+  2001,
+  2002,
+  2003,
+  2004,
+  2005
+ ]
+}

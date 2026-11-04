@@ -1,0 +1,1081 @@
+
+=== Qwen/Qwen2.5-0.5B/lr1e-4_t150k ===
+S_core versus B3_pairs [exploratory] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  acq_direct: -0.733 CI[-0.867, -0.583] seeds=1
+  acq_reverse: -0.650 CI[-0.767, -0.533] seeds=1
+  acq_alias: +0.050 CI[-0.067, +0.183] seeds=1
+  acq_twohop: -0.017 CI[-0.083, +0.050] seeds=1
+  supersede: -0.733 CI[-1.000, -0.467] seeds=1
+  ret_real: +0.347 CI[+0.267, +0.427] seeds=1
+  stale: +0.133 CI[+0.000, +0.333] seeds=1
+  taught_value_bleed: -0.217 CI[-0.317, -0.117] seeds=1
+  false_recall_any_specific: +0.000 CI[+0.000, +0.000] seeds=1
+  drift_generic: -1.311 CI[-1.449, -1.177] seeds=1
+S_core versus B3_replay [exploratory] (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  acq_direct: not available
+  acq_reverse: not available
+  acq_alias: not available
+  acq_twohop: not available
+  supersede: not available
+  ret_real: not available
+  stale: not available
+  taught_value_bleed: not available
+  false_recall_any_specific: not available
+  drift_generic: not available
+
+Validity (acceptance, unscored fraction, integrate count, budget spent)
+arm | seeds | acceptance | unscored | gate_rate | chains_per_night | integrate_per_night | spent_fraction | unspent_per_night | control_drop
+--- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_derived | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.998 | 228.000 | -
+B3_pairs | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 0.000 | 0.999 | 145.333 | -
+B4_replay_kl | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.998 | 283.333 | -
+B4q | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.997 | 427.667 | -
+B4q_compact | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.998 | 327.000 | -
+B4q_idk | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.998 | 329.667 | -
+B4q_r8 | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.997 | 427.667 | -
+S_core | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 144.667 | 0.995 | 784.667 | -
+S_coreq | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 153.667 | 0.995 | 763.000 | -
+S_oracleq | 1 | 1.000 | 0.000 | 0.000 | 27.667 | 277.333 | 0.994 | 928.000 | -
+
+Anchor drift increase per night, nats per token (E1 sets max_anchor_drift from this)
+arm | nights | min | median | p90 | max
+--- | --- | --- | --- | --- | ---
+S_core | 3 | -0.105 | 0.031 | 0.199 | 0.199
+S_coreq | 3 | -0.078 | -0.002 | 0.242 | 0.242
+S_oracleq | 3 | -0.217 | 0.045 | 0.178 | 0.178
+
+Hypotheses
+  H2_reverse: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_alias: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_twohop: not supported [exploratory] p_holm=1.000 diff=-0.017 CI[-0.083, +0.050] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  H3: withdrawn [exploratory] (A2.1: withdrawn unless E0b restores selection)
+  H4: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H5: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H6: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H7: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H2: missing [exploratory] (all three H2 members must hold)
+  H8: not measured [exploratory] only 0 facts would have retired; 20 needed (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H9: not measured [exploratory] (needs a same-night conflict world)
+
+H8's log for S_core, per seed and night: gap vs. correctness, and change against the controls
+seed | night | taught | tonight | controls | auroc_probe | auroc_heldout | auroc_probe_before | within_fact_auroc | within_fact_auroc_heldout | gap_vs_correct_change | mean_gap_change | control_mean_gap_change | mean_correct_before | mean_correct_after | control_correct_before | control_correct_after | regression_slope | control_regression_slope | taught_net_of_control
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+7 | 0 | 49 | 49 | 40 | 0.783 | 0.333 | - | 0.400 | 0.067 | 0.066 | -1.436 | -1.313 | 0.000 | 0.082 | 0.000 | 0.025 | -0.827 | -0.679 | -0.112
+7 | 1 | 97 | 53 | 40 | 0.854 | 0.800 | 0.981 | 0.646 | 1.000 | -0.112 | 0.031 | 0.212 | 0.019 | 0.075 | 0.025 | 0.025 | -0.241 | -0.125 | -0.146
+7 | 2 | 150 | 59 | 40 | 0.916 | 0.583 | 0.921 | 0.613 | 0.477 | -0.147 | -0.741 | -0.397 | 0.034 | 0.186 | 0.025 | 0.025 | -0.461 | -0.435 | -0.058
+
+Arms at the final night (means over seeds)
+arm | seeds | acq_direct | acq_direct_lift | acq_reverse | acq_reverse_lift | acq_alias | acq_alias_lift | acq_twohop | acq_twohop_lift | acq_implied | supersede | stale | preservation | taught_value_bleed | false_recall_any_specific | false_recall_neighbour | ret_real | ret_real_head | ret_real_tail | drift_generic | delta_norm | delta_rank | style_length | style_artefact
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_derived | 1 | 0.917 | 0.917 | 0.500 | 0.483 | 0.417 | 0.400 | 0.433 | 0.433 | 0.450 | 0.867 | 0.000 | 0.917 | 1.000 | 1.000 | 0.750 | 0.093 | 0.147 | 0.040 | 1.755 | 6.074 | 16128.000 | 5.179 | 0.000
+B3_pairs | 1 | 0.883 | 0.883 | 0.667 | 0.667 | 0.083 | 0.033 | 0.000 | 0.000 | 0.250 | 1.000 | 0.000 | 0.950 | 1.000 | 1.000 | 0.583 | 0.100 | 0.160 | 0.040 | 1.644 | 6.114 | 16128.000 | 5.296 | 0.000
+B4_replay_kl | 1 | 0.200 | 0.183 | 0.067 | 0.033 | 0.150 | 0.083 | 0.067 | 0.017 | 0.094 | 0.200 | 0.200 | 0.150 | 0.950 | 1.000 | 0.083 | 0.367 | 0.493 | 0.240 | 0.040 | 4.275 | 16128.000 | 5.600 | 0.000
+B4q | 1 | 0.150 | 0.100 | 0.033 | -0.017 | 0.133 | 0.100 | 0.017 | -0.033 | 0.061 | 0.333 | 0.200 | 0.117 | 0.933 | 1.000 | 0.050 | 0.747 | 0.893 | 0.600 | 0.128 | 4.144 | 16128.000 | 6.004 | 0.000
+B4q_compact | 1 | 0.150 | 0.133 | 0.000 | -0.017 | 0.133 | 0.100 | 0.067 | 0.050 | 0.067 | 0.333 | 0.133 | 0.083 | 0.883 | 1.000 | 0.100 | 0.753 | 0.880 | 0.627 | 0.108 | 3.776 | 27330.000 | 6.129 | 0.000
+B4q_idk | 1 | 0.033 | 0.033 | 0.017 | 0.000 | 0.033 | 0.033 | 0.000 | 0.000 | 0.017 | 0.067 | 0.133 | 0.017 | 0.500 | 0.500 | 0.083 | 0.680 | 0.813 | 0.547 | 0.124 | 4.027 | 16128.000 | 5.808 | 0.000
+B4q_r8 | 1 | 0.083 | 0.067 | 0.000 | -0.033 | 0.117 | 0.100 | 0.017 | -0.083 | 0.044 | 0.200 | 0.133 | 0.050 | 0.617 | 1.000 | 0.067 | 0.660 | 0.787 | 0.533 | 0.092 | 2.939 | 4032.000 | 6.446 | 0.000
+S_core | 1 | 0.183 | 0.150 | 0.017 | 0.017 | 0.117 | 0.083 | 0.033 | -0.017 | 0.056 | 0.333 | 0.133 | 0.083 | 0.783 | 1.000 | 0.083 | 0.447 | 0.600 | 0.293 | 0.333 | 3.405 | 27388.000 | 5.967 | 0.000
+S_coreq | 1 | 0.100 | 0.067 | 0.000 | 0.000 | 0.133 | 0.050 | 0.117 | 0.067 | 0.083 | 0.133 | 0.067 | 0.117 | 0.750 | 1.000 | 0.117 | 0.600 | 0.760 | 0.440 | 0.153 | 3.276 | 27350.000 | 6.688 | 0.000
+S_oracleq | 1 | 0.133 | 0.117 | 0.083 | 0.067 | 0.133 | 0.117 | 0.117 | 0.050 | 0.111 | 0.067 | 0.067 | 0.083 | 0.750 | 1.000 | 0.067 | 0.540 | 0.720 | 0.360 | 0.270 | 3.564 | 27096.000 | 6.763 | 0.000
+
+Direct accuracy by fact age, at the final night
+arm | age_0 | age_1 | age_2
+--- | --- | --- | ---
+B3_derived | 0.818 | 1.000 | 0.944
+B3_pairs | 0.818 | 1.000 | 0.944
+B4_replay_kl | 0.152 | 0.208 | 0.278
+B4q | 0.091 | 0.292 | 0.222
+B4q_compact | 0.121 | 0.250 | 0.222
+B4q_idk | 0.030 | 0.000 | 0.111
+B4q_r8 | 0.091 | 0.083 | 0.167
+S_core | 0.182 | 0.167 | 0.333
+S_coreq | 0.091 | 0.167 | 0.056
+S_oracleq | 0.152 | 0.125 | 0.056
+
+Pilot checks: {'best_acq_implied': 0.45, 'kill_no_arm_reaches_0.5_implied': True, 'B3_acq_direct': None, 'B3_reaches_0.7_direct': False}
+
+=== Qwen/Qwen2.5-0.5B/lr1e-4_t50k ===
+S_core versus B3_pairs [exploratory] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  acq_direct: -0.167 CI[-0.300, -0.067] seeds=1
+  acq_reverse: -0.050 CI[-0.133, +0.033] seeds=1
+  acq_alias: -0.083 CI[-0.233, +0.067] seeds=1
+  acq_twohop: +0.000 CI[-0.167, +0.150] seeds=1
+  supersede: +0.000 CI[-0.267, +0.267] seeds=1
+  ret_real: +0.347 CI[+0.267, +0.427] seeds=1
+  stale: -0.133 CI[-0.400, +0.133] seeds=1
+  taught_value_bleed: -0.417 CI[-0.533, -0.300] seeds=1
+  false_recall_any_specific: +0.000 CI[+0.000, +0.000] seeds=1
+  drift_generic: -0.829 CI[-0.930, -0.730] seeds=1
+S_core versus B3_replay [exploratory] (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  acq_direct: not available
+  acq_reverse: not available
+  acq_alias: not available
+  acq_twohop: not available
+  supersede: not available
+  ret_real: not available
+  stale: not available
+  taught_value_bleed: not available
+  false_recall_any_specific: not available
+  drift_generic: not available
+
+Validity (acceptance, unscored fraction, integrate count, budget spent)
+arm | seeds | acceptance | unscored | gate_rate | chains_per_night | integrate_per_night | spent_fraction | unspent_per_night | control_drop
+--- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_derived | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.996 | 222.000 | -
+B3_pairs | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 0.000 | 0.994 | 276.000 | -
+B4_replay_kl | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.990 | 492.000 | -
+B4q | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.993 | 337.000 | -
+B4q_compact | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.992 | 424.333 | -
+B4q_idk | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.995 | 243.667 | -
+B4q_r8 | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.993 | 337.000 | -
+S_core | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 38.333 | 0.991 | 470.667 | -
+S_coreq | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 48.333 | 0.990 | 494.000 | -
+S_oracleq | 1 | 0.667 | 0.000 | 0.000 | 27.667 | 277.333 | 0.983 | 829.333 | -
+
+Anchor drift increase per night, nats per token (E1 sets max_anchor_drift from this)
+arm | nights | min | median | p90 | max
+--- | --- | --- | --- | --- | ---
+S_core | 3 | 0.037 | 0.096 | 0.120 | 0.120
+S_coreq | 3 | -0.424 | -0.050 | 0.165 | 0.165
+S_oracleq | 2 | -0.141 | 0.108 | 0.108 | 0.108
+
+Hypotheses
+  H2_reverse: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_alias: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_twohop: not supported [exploratory] p_holm=1.000 diff=+0.000 CI[-0.167, +0.150] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  H3: withdrawn [exploratory] (A2.1: withdrawn unless E0b restores selection)
+  H4: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H5: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H6: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H7: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H2: missing [exploratory] (all three H2 members must hold)
+  H8: not measured [exploratory] only 0 facts would have retired; 20 needed (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H9: not measured [exploratory] (needs a same-night conflict world)
+
+H8's log for S_core, per seed and night: gap vs. correctness, and change against the controls
+seed | night | taught | tonight | controls | auroc_probe | auroc_heldout | auroc_probe_before | within_fact_auroc | within_fact_auroc_heldout | gap_vs_correct_change | mean_gap_change | control_mean_gap_change | mean_correct_before | mean_correct_after | control_correct_before | control_correct_after | regression_slope | control_regression_slope | taught_net_of_control
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+7 | 0 | 49 | 49 | 40 | - | - | - | - | - | - | -0.779 | -0.791 | 0.000 | 0.000 | 0.000 | 0.025 | -0.445 | -0.492 | 0.020
+7 | 1 | 97 | 53 | 40 | 0.805 | - | - | 0.712 | - | -0.040 | -0.041 | -0.282 | 0.000 | 0.019 | 0.025 | 0.025 | -0.208 | -0.417 | 0.065
+7 | 2 | 150 | 59 | 40 | 0.980 | - | 0.690 | 0.982 | - | -0.156 | 0.206 | 0.122 | 0.017 | 0.017 | 0.025 | 0.025 | -0.089 | -0.296 | 0.074
+
+Arms at the final night (means over seeds)
+arm | seeds | acq_direct | acq_direct_lift | acq_reverse | acq_reverse_lift | acq_alias | acq_alias_lift | acq_twohop | acq_twohop_lift | acq_implied | supersede | stale | preservation | taught_value_bleed | false_recall_any_specific | false_recall_neighbour | ret_real | ret_real_head | ret_real_tail | drift_generic | delta_norm | delta_rank | style_length | style_artefact
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_derived | 1 | 0.067 | 0.050 | 0.017 | 0.017 | 0.100 | 0.017 | 0.067 | 0.033 | 0.061 | 0.200 | 0.067 | 0.100 | 0.950 | 1.000 | 0.150 | 0.073 | 0.093 | 0.053 | 1.255 | 3.892 | 16128.000 | 5.438 | 0.000
+B3_pairs | 1 | 0.167 | 0.167 | 0.067 | 0.050 | 0.133 | 0.067 | 0.050 | 0.000 | 0.083 | 0.133 | 0.200 | 0.183 | 0.800 | 1.000 | 0.150 | 0.080 | 0.147 | 0.013 | 1.134 | 3.912 | 16128.000 | 5.175 | 0.000
+B4_replay_kl | 1 | 0.033 | 0.000 | 0.033 | 0.017 | 0.083 | 0.067 | 0.033 | -0.067 | 0.050 | 0.067 | 0.200 | 0.050 | 0.633 | 1.000 | 0.067 | 0.360 | 0.507 | 0.213 | 0.079 | 2.591 | 16128.000 | 5.721 | 0.000
+B4q | 1 | 0.033 | 0.017 | 0.017 | 0.000 | 0.083 | 0.083 | 0.000 | -0.100 | 0.033 | 0.000 | 0.200 | 0.033 | 0.533 | 1.000 | 0.050 | 0.640 | 0.773 | 0.507 | 0.149 | 2.537 | 16128.000 | 7.221 | 0.000
+B4q_compact | 1 | 0.033 | 0.017 | 0.017 | 0.000 | 0.100 | 0.100 | 0.000 | -0.100 | 0.039 | 0.000 | 0.200 | 0.017 | 0.433 | 1.000 | 0.050 | 0.680 | 0.827 | 0.533 | 0.145 | 2.309 | 27911.000 | 6.579 | 0.000
+B4q_idk | 1 | 0.017 | 0.017 | 0.000 | -0.017 | 0.017 | 0.017 | 0.000 | 0.000 | 0.006 | 0.000 | 0.000 | 0.000 | 0.483 | 0.533 | 0.033 | 0.653 | 0.747 | 0.560 | 0.141 | 2.421 | 16128.000 | 5.562 | 0.000
+B4q_r8 | 1 | 0.000 | 0.000 | 0.000 | 0.000 | 0.033 | 0.017 | 0.000 | 0.000 | 0.011 | 0.000 | 0.000 | 0.000 | 0.300 | 1.000 | 0.000 | 0.747 | 0.880 | 0.613 | 0.096 | 1.601 | 4032.000 | 9.071 | 0.000
+S_core | 1 | 0.017 | 0.000 | 0.017 | 0.000 | 0.033 | -0.017 | 0.100 | 0.000 | 0.050 | 0.000 | 0.067 | 0.017 | 0.383 | 1.000 | 0.000 | 0.427 | 0.573 | 0.280 | 0.305 | 2.215 | 27678.000 | 6.667 | 0.000
+S_coreq | 1 | 0.000 | -0.017 | 0.017 | 0.017 | 0.050 | 0.033 | 0.000 | -0.033 | 0.022 | 0.000 | 0.067 | 0.017 | 0.450 | 1.000 | 0.017 | 0.633 | 0.787 | 0.480 | 0.171 | 1.913 | 28177.000 | 11.204 | 0.000
+S_oracleq | 1 | 0.017 | 0.000 | 0.000 | 0.000 | 0.050 | 0.050 | 0.033 | -0.067 | 0.028 | 0.000 | 0.000 | 0.017 | 0.533 | 1.000 | 0.017 | 0.607 | 0.720 | 0.493 | 0.222 | 1.794 | 20551.000 | 8.254 | 0.000
+
+Direct accuracy by fact age, at the final night
+arm | age_0 | age_1 | age_2
+--- | --- | --- | ---
+B3_derived | 0.091 | 0.125 | 0.056
+B3_pairs | 0.091 | 0.167 | 0.278
+B4_replay_kl | 0.000 | 0.042 | 0.111
+B4q | 0.030 | 0.000 | 0.056
+B4q_compact | 0.030 | 0.042 | 0.000
+B4q_idk | 0.000 | 0.042 | 0.000
+B4q_r8 | 0.000 | 0.000 | 0.000
+S_core | 0.000 | 0.000 | 0.056
+S_coreq | 0.000 | 0.000 | 0.000
+S_oracleq | 0.030 | 0.000 | 0.000
+
+Pilot checks: {'best_acq_implied': 0.08333333333333333, 'kill_no_arm_reaches_0.5_implied': True, 'B3_acq_direct': None, 'B3_reaches_0.7_direct': False}
+
+=== Qwen/Qwen2.5-0.5B/lr1e-5_t150k ===
+S_core versus B3_pairs [exploratory] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  acq_direct: -0.017 CI[-0.083, +0.033] seeds=1
+  acq_reverse: -0.017 CI[-0.050, +0.000] seeds=1
+  acq_alias: -0.067 CI[-0.150, +0.000] seeds=1
+  acq_twohop: +0.050 CI[-0.050, +0.150] seeds=1
+  supersede: +0.000 CI[-0.200, +0.200] seeds=1
+  ret_real: +0.520 CI[+0.433, +0.607] seeds=1
+  stale: -0.067 CI[-0.200, +0.000] seeds=1
+  taught_value_bleed: -0.167 CI[-0.267, -0.067] seeds=1
+  false_recall_any_specific: +0.000 CI[+0.000, +0.000] seeds=1
+  drift_generic: -0.287 CI[-0.321, -0.255] seeds=1
+S_core versus B3_replay [exploratory] (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  acq_direct: not available
+  acq_reverse: not available
+  acq_alias: not available
+  acq_twohop: not available
+  supersede: not available
+  ret_real: not available
+  stale: not available
+  taught_value_bleed: not available
+  false_recall_any_specific: not available
+  drift_generic: not available
+
+Validity (acceptance, unscored fraction, integrate count, budget spent)
+arm | seeds | acceptance | unscored | gate_rate | chains_per_night | integrate_per_night | spent_fraction | unspent_per_night | control_drop
+--- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_derived | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.998 | 228.000 | -
+B3_pairs | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 0.000 | 0.999 | 145.333 | -
+B4_replay_kl | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.998 | 283.333 | -
+B4q | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.997 | 427.667 | -
+B4q_compact | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.998 | 327.000 | -
+B4q_idk | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.998 | 329.667 | -
+B4q_r8 | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.997 | 427.667 | -
+S_core | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 140.667 | 0.994 | 850.667 | -
+S_coreq | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 145.333 | 0.996 | 609.333 | -
+S_oracleq | 1 | 1.000 | 0.000 | 0.000 | 27.667 | 277.333 | 0.995 | 703.000 | -
+
+Anchor drift increase per night, nats per token (E1 sets max_anchor_drift from this)
+arm | nights | min | median | p90 | max
+--- | --- | --- | --- | --- | ---
+S_core | 3 | -0.018 | 0.021 | 0.076 | 0.076
+S_coreq | 3 | 0.006 | 0.025 | 0.082 | 0.082
+S_oracleq | 3 | -0.107 | -0.074 | 0.090 | 0.090
+
+Hypotheses
+  H2_reverse: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_alias: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_twohop: not supported [exploratory] p_holm=1.000 diff=+0.050 CI[-0.050, +0.150] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  H3: withdrawn [exploratory] (A2.1: withdrawn unless E0b restores selection)
+  H4: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H5: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H6: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H7: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H2: missing [exploratory] (all three H2 members must hold)
+  H8: missing [exploratory] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H9: not measured [exploratory] (needs a same-night conflict world)
+
+H8's log for S_core, per seed and night: gap vs. correctness, and change against the controls
+seed | night | taught | tonight | controls | auroc_probe | auroc_heldout | auroc_probe_before | within_fact_auroc | within_fact_auroc_heldout | gap_vs_correct_change | mean_gap_change | control_mean_gap_change | mean_correct_before | mean_correct_after | control_correct_before | control_correct_after | regression_slope | control_regression_slope | taught_net_of_control
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+7 | 0 | 49 | 49 | 40 | - | - | - | - | - | - | -0.105 | -0.247 | 0.000 | 0.000 | 0.000 | 0.025 | -0.182 | -0.256 | 0.145
+7 | 1 | 97 | 53 | 40 | - | - | - | - | - | - | 0.463 | 0.507 | 0.000 | 0.000 | 0.025 | 0.025 | -0.084 | -0.109 | -0.106
+7 | 2 | 150 | 59 | 40 | - | - | - | - | - | - | -0.204 | -0.208 | 0.000 | 0.000 | 0.025 | 0.000 | -0.056 | -0.066 | -0.016
+
+Arms at the final night (means over seeds)
+arm | seeds | acq_direct | acq_direct_lift | acq_reverse | acq_reverse_lift | acq_alias | acq_alias_lift | acq_twohop | acq_twohop_lift | acq_implied | supersede | stale | preservation | taught_value_bleed | false_recall_any_specific | false_recall_neighbour | ret_real | ret_real_head | ret_real_tail | drift_generic | delta_norm | delta_rank | style_length | style_artefact
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_derived | 1 | 0.033 | 0.017 | 0.017 | -0.033 | 0.067 | 0.050 | 0.017 | 0.000 | 0.033 | 0.067 | 0.067 | 0.033 | 0.583 | 1.000 | 0.100 | 0.113 | 0.213 | 0.013 | 0.369 | 1.583 | 16124.000 | 5.721 | 0.000
+B3_pairs | 1 | 0.033 | 0.017 | 0.017 | 0.017 | 0.100 | 0.100 | 0.050 | -0.050 | 0.056 | 0.067 | 0.067 | 0.017 | 0.467 | 1.000 | 0.033 | 0.160 | 0.280 | 0.040 | 0.359 | 1.607 | 16128.000 | 5.450 | 0.000
+B4_replay_kl | 1 | 0.000 | 0.000 | 0.000 | 0.000 | 0.033 | 0.033 | 0.000 | 0.000 | 0.011 | 0.000 | 0.000 | 0.017 | 0.283 | 1.000 | 0.000 | 0.520 | 0.653 | 0.387 | 0.060 | 0.928 | 16128.000 | 6.342 | 0.000
+B4q | 1 | 0.000 | 0.000 | 0.000 | 0.000 | 0.033 | 0.017 | 0.000 | 0.000 | 0.011 | 0.000 | 0.000 | 0.000 | 0.317 | 1.000 | 0.000 | 0.787 | 0.893 | 0.680 | 0.084 | 0.893 | 16128.000 | 9.204 | 0.000
+B4q_compact | 1 | 0.000 | 0.000 | 0.000 | 0.000 | 0.033 | 0.017 | 0.000 | 0.000 | 0.011 | 0.000 | 0.000 | 0.000 | 0.317 | 1.000 | 0.000 | 0.793 | 0.893 | 0.693 | 0.080 | 0.790 | 23135.000 | 9.296 | 0.000
+B4q_idk | 1 | 0.000 | 0.000 | 0.000 | 0.000 | 0.017 | 0.017 | 0.000 | 0.000 | 0.006 | 0.000 | 0.000 | 0.000 | 0.283 | 0.800 | 0.000 | 0.733 | 0.813 | 0.653 | 0.079 | 0.833 | 16128.000 | 10.004 | 0.000
+B4q_r8 | 1 | 0.000 | 0.000 | 0.000 | 0.000 | 0.017 | 0.017 | 0.000 | 0.000 | 0.006 | 0.000 | 0.000 | 0.000 | 0.283 | 1.000 | 0.000 | 0.807 | 0.920 | 0.693 | 0.019 | 0.557 | 4032.000 | 12.071 | 0.000
+S_core | 1 | 0.000 | 0.000 | 0.000 | 0.000 | 0.033 | 0.033 | 0.000 | 0.000 | 0.011 | 0.000 | 0.000 | 0.000 | 0.300 | 1.000 | 0.033 | 0.680 | 0.827 | 0.533 | 0.072 | 0.583 | 23689.000 | 9.071 | 0.000
+S_coreq | 1 | 0.000 | 0.000 | 0.000 | 0.000 | 0.017 | 0.017 | 0.000 | 0.000 | 0.006 | 0.000 | 0.000 | 0.000 | 0.283 | 1.000 | 0.017 | 0.753 | 0.893 | 0.613 | 0.056 | 0.567 | 23622.000 | 9.504 | 0.000
+S_oracleq | 1 | 0.000 | -0.033 | 0.000 | 0.000 | 0.017 | 0.000 | 0.000 | 0.000 | 0.006 | 0.000 | 0.000 | 0.000 | 0.350 | 1.000 | 0.000 | 0.653 | 0.773 | 0.533 | 0.088 | 0.676 | 23230.000 | 8.604 | 0.000
+
+Direct accuracy by fact age, at the final night
+arm | age_0 | age_1 | age_2
+--- | --- | --- | ---
+B3_derived | 0.000 | 0.042 | 0.111
+B3_pairs | 0.030 | 0.042 | 0.056
+B4_replay_kl | 0.000 | 0.000 | 0.000
+B4q | 0.000 | 0.000 | 0.000
+B4q_compact | 0.000 | 0.000 | 0.000
+B4q_idk | 0.000 | 0.000 | 0.000
+B4q_r8 | 0.000 | 0.000 | 0.000
+S_core | 0.000 | 0.000 | 0.000
+S_coreq | 0.000 | 0.000 | 0.000
+S_oracleq | 0.000 | 0.000 | 0.000
+
+Pilot checks: {'best_acq_implied': 0.05555555555555555, 'kill_no_arm_reaches_0.5_implied': True, 'B3_acq_direct': None, 'B3_reaches_0.7_direct': False}
+
+=== Qwen/Qwen2.5-0.5B/lr1e-5_t400k ===
+S_core versus B3_pairs [exploratory] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  acq_direct: -0.100 CI[-0.217, +0.017] seeds=1
+  acq_reverse: -0.017 CI[-0.083, +0.050] seeds=1
+  acq_alias: +0.050 CI[-0.083, +0.167] seeds=1
+  acq_twohop: -0.050 CI[-0.183, +0.083] seeds=1
+  supersede: -0.200 CI[-0.533, +0.133] seeds=1
+  ret_real: +0.373 CI[+0.300, +0.453] seeds=1
+  stale: -0.133 CI[-0.333, +0.000] seeds=1
+  taught_value_bleed: -0.433 CI[-0.550, -0.317] seeds=1
+  false_recall_any_specific: +0.000 CI[+0.000, +0.000] seeds=1
+  drift_generic: -0.449 CI[-0.514, -0.388] seeds=1
+S_core versus B3_replay [exploratory] (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  acq_direct: not available
+  acq_reverse: not available
+  acq_alias: not available
+  acq_twohop: not available
+  supersede: not available
+  ret_real: not available
+  stale: not available
+  taught_value_bleed: not available
+  false_recall_any_specific: not available
+  drift_generic: not available
+
+Validity (acceptance, unscored fraction, integrate count, budget spent)
+arm | seeds | acceptance | unscored | gate_rate | chains_per_night | integrate_per_night | spent_fraction | unspent_per_night | control_drop
+--- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_derived | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.999 | 218.000 | -
+B3_pairs | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 0.000 | 0.999 | 212.667 | -
+B4_replay_kl | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 1.000 | 191.000 | -
+B4q | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.999 | 235.000 | -
+B4q_compact | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.992 | 3387.000 | -
+B4q_idk | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.998 | 676.333 | -
+B4q_r8 | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.999 | 235.000 | -
+S_core | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 269.333 | 0.989 | 4359.333 | -
+S_coreq | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 273.333 | 0.989 | 4371.000 | -
+S_oracleq | 1 | 1.000 | 0.000 | 0.000 | 27.667 | 277.333 | 0.989 | 4324.000 | -
+
+Anchor drift increase per night, nats per token (E1 sets max_anchor_drift from this)
+arm | nights | min | median | p90 | max
+--- | --- | --- | --- | --- | ---
+S_core | 3 | -0.157 | -0.028 | 0.141 | 0.141
+S_coreq | 3 | -0.158 | 0.015 | 0.160 | 0.160
+S_oracleq | 3 | -0.118 | 0.056 | 0.105 | 0.105
+
+Hypotheses
+  H2_reverse: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_alias: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_twohop: not supported [exploratory] p_holm=1.000 diff=-0.050 CI[-0.183, +0.083] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  H3: withdrawn [exploratory] (A2.1: withdrawn unless E0b restores selection)
+  H4: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H5: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H6: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H7: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H2: missing [exploratory] (all three H2 members must hold)
+  H8: not measured [exploratory] only 0 facts would have retired; 20 needed (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H9: not measured [exploratory] (needs a same-night conflict world)
+
+H8's log for S_core, per seed and night: gap vs. correctness, and change against the controls
+seed | night | taught | tonight | controls | auroc_probe | auroc_heldout | auroc_probe_before | within_fact_auroc | within_fact_auroc_heldout | gap_vs_correct_change | mean_gap_change | control_mean_gap_change | mean_correct_before | mean_correct_after | control_correct_before | control_correct_after | regression_slope | control_regression_slope | taught_net_of_control
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+7 | 0 | 49 | 49 | 40 | - | - | - | - | - | - | -0.433 | -0.308 | 0.000 | 0.000 | 0.000 | 0.025 | -0.429 | -0.340 | -0.120
+7 | 1 | 97 | 53 | 40 | 0.646 | - | - | - | - | - | 0.512 | 0.068 | 0.000 | 0.000 | 0.025 | 0.000 | -0.162 | -0.262 | 0.326
+7 | 2 | 150 | 59 | 40 | 0.894 | - | 0.810 | 0.295 | - | 0.085 | -0.362 | -0.363 | 0.017 | 0.051 | 0.000 | 0.050 | -0.253 | -0.324 | 0.077
+
+Arms at the final night (means over seeds)
+arm | seeds | acq_direct | acq_direct_lift | acq_reverse | acq_reverse_lift | acq_alias | acq_alias_lift | acq_twohop | acq_twohop_lift | acq_implied | supersede | stale | preservation | taught_value_bleed | false_recall_any_specific | false_recall_neighbour | ret_real | ret_real_head | ret_real_tail | drift_generic | delta_norm | delta_rank | style_length | style_artefact
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_derived | 1 | 0.133 | 0.100 | 0.033 | 0.017 | 0.100 | 0.050 | 0.133 | 0.100 | 0.089 | 0.200 | 0.133 | 0.117 | 0.883 | 1.000 | 0.083 | 0.067 | 0.093 | 0.040 | 0.623 | 2.320 | 16122.000 | 5.425 | 0.000
+B3_pairs | 1 | 0.167 | 0.150 | 0.050 | 0.017 | 0.100 | 0.033 | 0.050 | 0.000 | 0.067 | 0.333 | 0.133 | 0.117 | 0.783 | 1.000 | 0.083 | 0.107 | 0.173 | 0.040 | 0.666 | 2.349 | 16128.000 | 5.479 | 0.000
+B4_replay_kl | 1 | 0.050 | 0.033 | 0.033 | 0.017 | 0.100 | 0.083 | 0.050 | -0.050 | 0.061 | 0.067 | 0.200 | 0.050 | 0.617 | 1.000 | 0.067 | 0.327 | 0.453 | 0.200 | 0.057 | 1.670 | 16128.000 | 5.713 | 0.000
+B4q | 1 | 0.033 | 0.017 | 0.000 | -0.017 | 0.067 | 0.067 | 0.000 | -0.100 | 0.022 | 0.000 | 0.133 | 0.000 | 0.467 | 1.000 | 0.033 | 0.687 | 0.827 | 0.547 | 0.093 | 1.628 | 16128.000 | 8.050 | 0.000
+B4q_compact | 1 | 0.033 | 0.033 | 0.000 | -0.017 | 0.083 | 0.083 | 0.000 | -0.100 | 0.028 | 0.000 | 0.067 | 0.000 | 0.467 | 1.000 | 0.033 | 0.720 | 0.827 | 0.613 | 0.093 | 1.490 | 20710.000 | 7.717 | 0.000
+B4q_idk | 1 | 0.017 | 0.017 | 0.000 | 0.000 | 0.017 | 0.017 | 0.000 | -0.033 | 0.006 | 0.000 | 0.000 | 0.000 | 0.533 | 0.750 | 0.000 | 0.680 | 0.800 | 0.560 | 0.095 | 1.560 | 16128.000 | 8.100 | 0.000
+B4q_r8 | 1 | 0.000 | -0.017 | 0.000 | 0.000 | 0.033 | 0.017 | 0.000 | 0.000 | 0.011 | 0.000 | 0.000 | 0.000 | 0.300 | 1.000 | 0.000 | 0.733 | 0.867 | 0.600 | 0.077 | 1.191 | 4032.000 | 8.567 | 0.000
+S_core | 1 | 0.050 | 0.050 | 0.000 | 0.000 | 0.083 | 0.083 | 0.050 | -0.050 | 0.044 | 0.000 | 0.000 | 0.000 | 0.350 | 1.000 | 0.017 | 0.480 | 0.627 | 0.333 | 0.217 | 1.285 | 21777.000 | 5.608 | 0.000
+S_coreq | 1 | 0.033 | -0.017 | 0.000 | 0.000 | 0.117 | 0.117 | 0.033 | -0.083 | 0.050 | 0.067 | 0.067 | 0.000 | 0.517 | 1.000 | 0.000 | 0.533 | 0.667 | 0.400 | 0.131 | 1.196 | 21924.000 | 6.321 | 0.000
+S_oracleq | 1 | 0.017 | -0.017 | 0.000 | 0.000 | 0.067 | 0.050 | 0.033 | -0.083 | 0.033 | 0.000 | 0.000 | 0.017 | 0.650 | 1.000 | 0.050 | 0.473 | 0.600 | 0.347 | 0.228 | 1.386 | 21401.000 | 5.967 | 0.000
+
+Direct accuracy by fact age, at the final night
+arm | age_0 | age_1 | age_2
+--- | --- | --- | ---
+B3_derived | 0.121 | 0.167 | 0.167
+B3_pairs | 0.121 | 0.292 | 0.222
+B4_replay_kl | 0.030 | 0.042 | 0.111
+B4q | 0.030 | 0.042 | 0.000
+B4q_compact | 0.030 | 0.042 | 0.000
+B4q_idk | 0.000 | 0.042 | 0.000
+B4q_r8 | 0.000 | 0.000 | 0.000
+S_core | 0.091 | 0.000 | 0.000
+S_coreq | 0.061 | 0.042 | 0.000
+S_oracleq | 0.000 | 0.000 | 0.056
+
+Pilot checks: {'best_acq_implied': 0.08888888888888889, 'kill_no_arm_reaches_0.5_implied': True, 'B3_acq_direct': None, 'B3_reaches_0.7_direct': False}
+
+=== Qwen/Qwen2.5-0.5B/lr1e-5_t50k ===
+S_core versus B3_pairs [exploratory] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  acq_direct: +0.000 CI[+0.000, +0.000] seeds=1
+  acq_reverse: +0.000 CI[+0.000, +0.000] seeds=1
+  acq_alias: -0.017 CI[-0.067, +0.033] seeds=1
+  acq_twohop: +0.000 CI[+0.000, +0.000] seeds=1
+  supersede: +0.000 CI[+0.000, +0.000] seeds=1
+  ret_real: +0.300 CI[+0.220, +0.373] seeds=1
+  stale: +0.000 CI[+0.000, +0.000] seeds=1
+  taught_value_bleed: +0.000 CI[+0.000, +0.000] seeds=1
+  false_recall_any_specific: +0.000 CI[+0.000, +0.000] seeds=1
+  drift_generic: -0.107 CI[-0.117, -0.097] seeds=1
+S_core versus B3_replay [exploratory] (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  acq_direct: not available
+  acq_reverse: not available
+  acq_alias: not available
+  acq_twohop: not available
+  supersede: not available
+  ret_real: not available
+  stale: not available
+  taught_value_bleed: not available
+  false_recall_any_specific: not available
+  drift_generic: not available
+
+Validity (acceptance, unscored fraction, integrate count, budget spent)
+arm | seeds | acceptance | unscored | gate_rate | chains_per_night | integrate_per_night | spent_fraction | unspent_per_night | control_drop
+--- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_derived | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.996 | 222.000 | -
+B3_pairs | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 0.000 | 0.994 | 276.000 | -
+B4_replay_kl | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.990 | 492.000 | -
+B4q | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.993 | 337.000 | -
+B4q_compact | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.992 | 424.333 | -
+B4q_idk | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.995 | 243.667 | -
+B4q_r8 | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.993 | 337.000 | -
+S_core | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 50.667 | 0.991 | 467.333 | -
+S_coreq | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 48.333 | 0.987 | 646.333 | -
+S_oracleq | 1 | 0.667 | 0.000 | 0.000 | 27.667 | 277.333 | 0.986 | 683.667 | -
+
+Anchor drift increase per night, nats per token (E1 sets max_anchor_drift from this)
+arm | nights | min | median | p90 | max
+--- | --- | --- | --- | --- | ---
+S_core | 3 | -0.049 | 0.032 | 0.061 | 0.061
+S_coreq | 3 | -0.223 | -0.118 | 0.117 | 0.117
+S_oracleq | 2 | -0.048 | 0.031 | 0.031 | 0.031
+
+Hypotheses
+  H2_reverse: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_alias: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_twohop: not supported [exploratory] p_holm=1.000 diff=+0.000 CI[+0.000, +0.000] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  H3: withdrawn [exploratory] (A2.1: withdrawn unless E0b restores selection)
+  H4: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H5: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H6: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H7: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H2: missing [exploratory] (all three H2 members must hold)
+  H8: missing [exploratory] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H9: not measured [exploratory] (needs a same-night conflict world)
+
+H8's log for S_core, per seed and night: gap vs. correctness, and change against the controls
+seed | night | taught | tonight | controls | auroc_probe | auroc_heldout | auroc_probe_before | within_fact_auroc | within_fact_auroc_heldout | gap_vs_correct_change | mean_gap_change | control_mean_gap_change | mean_correct_before | mean_correct_after | control_correct_before | control_correct_after | regression_slope | control_regression_slope | taught_net_of_control
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+7 | 0 | 49 | 49 | 40 | - | - | - | - | - | - | 0.095 | 0.043 | 0.000 | 0.000 | 0.000 | 0.000 | -0.092 | -0.120 | 0.054
+7 | 1 | 97 | 53 | 40 | - | - | - | - | - | - | 0.357 | 0.422 | 0.000 | 0.000 | 0.000 | 0.025 | -0.145 | -0.127 | -0.159
+7 | 2 | 150 | 59 | 40 | - | - | - | - | - | - | 0.386 | 0.380 | 0.000 | 0.000 | 0.025 | 0.025 | -0.061 | 0.061 | 0.019
+
+Arms at the final night (means over seeds)
+arm | seeds | acq_direct | acq_direct_lift | acq_reverse | acq_reverse_lift | acq_alias | acq_alias_lift | acq_twohop | acq_twohop_lift | acq_implied | supersede | stale | preservation | taught_value_bleed | false_recall_any_specific | false_recall_neighbour | ret_real | ret_real_head | ret_real_tail | drift_generic | delta_norm | delta_rank | style_length | style_artefact
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_derived | 1 | 0.000 | 0.000 | 0.000 | 0.000 | 0.033 | 0.017 | 0.000 | 0.000 | 0.011 | 0.000 | 0.000 | 0.000 | 0.283 | 1.000 | 0.000 | 0.447 | 0.627 | 0.267 | 0.133 | 0.816 | 16128.000 | 5.821 | 0.000
+B3_pairs | 1 | 0.000 | 0.000 | 0.000 | 0.000 | 0.033 | 0.017 | 0.000 | 0.000 | 0.011 | 0.000 | 0.000 | 0.000 | 0.283 | 1.000 | 0.017 | 0.507 | 0.653 | 0.360 | 0.120 | 0.823 | 16128.000 | 5.954 | 0.000
+B4_replay_kl | 1 | 0.000 | 0.000 | 0.000 | 0.000 | 0.033 | 0.017 | 0.000 | 0.000 | 0.011 | 0.000 | 0.000 | 0.000 | 0.283 | 1.000 | 0.033 | 0.693 | 0.827 | 0.560 | 0.018 | 0.403 | 16128.000 | 6.362 | 0.000
+B4q | 1 | 0.000 | 0.000 | 0.000 | 0.000 | 0.017 | 0.017 | 0.000 | 0.000 | 0.006 | 0.000 | 0.000 | 0.000 | 0.283 | 1.000 | 0.000 | 0.800 | 0.893 | 0.707 | 0.020 | 0.392 | 16128.000 | 12.963 | 0.000
+B4q_compact | 1 | 0.000 | 0.000 | 0.000 | 0.000 | 0.017 | 0.017 | 0.000 | 0.000 | 0.006 | 0.000 | 0.000 | 0.000 | 0.283 | 1.000 | 0.000 | 0.807 | 0.920 | 0.693 | 0.020 | 0.347 | 24996.000 | 11.542 | 0.000
+B4q_idk | 1 | 0.000 | 0.000 | 0.000 | 0.000 | 0.017 | 0.017 | 0.000 | 0.000 | 0.006 | 0.000 | 0.000 | 0.000 | 0.283 | 0.933 | 0.017 | 0.847 | 0.947 | 0.747 | 0.018 | 0.371 | 16128.000 | 17.158 | 0.000
+B4q_r8 | 1 | 0.000 | 0.000 | 0.000 | 0.000 | 0.017 | 0.017 | 0.000 | 0.000 | 0.006 | 0.000 | 0.000 | 0.000 | 0.250 | 1.000 | 0.000 | 0.807 | 0.893 | 0.720 | 0.002 | 0.219 | 4032.000 | 12.908 | 0.000
+S_core | 1 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.283 | 1.000 | 0.033 | 0.807 | 0.907 | 0.707 | 0.013 | 0.320 | 25428.000 | 11.367 | 0.000
+S_coreq | 1 | 0.000 | 0.000 | 0.000 | 0.000 | 0.017 | 0.017 | 0.000 | 0.000 | 0.006 | 0.000 | 0.000 | 0.000 | 0.283 | 1.000 | 0.033 | 0.807 | 0.907 | 0.707 | 0.010 | 0.257 | 26124.000 | 13.154 | 0.000
+S_oracleq | 1 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.283 | 1.000 | 0.033 | 0.840 | 0.933 | 0.747 | 0.006 | 0.229 | 19836.000 | 13.912 | 0.000
+
+Direct accuracy by fact age, at the final night
+arm | age_0 | age_1 | age_2
+--- | --- | --- | ---
+B3_derived | 0.000 | 0.000 | 0.000
+B3_pairs | 0.000 | 0.000 | 0.000
+B4_replay_kl | 0.000 | 0.000 | 0.000
+B4q | 0.000 | 0.000 | 0.000
+B4q_compact | 0.000 | 0.000 | 0.000
+B4q_idk | 0.000 | 0.000 | 0.000
+B4q_r8 | 0.000 | 0.000 | 0.000
+S_core | 0.000 | 0.000 | 0.000
+S_coreq | 0.000 | 0.000 | 0.000
+S_oracleq | 0.000 | 0.000 | 0.000
+
+Pilot checks: {'best_acq_implied': 0.011111111111111112, 'kill_no_arm_reaches_0.5_implied': True, 'B3_acq_direct': None, 'B3_reaches_0.7_direct': False}
+
+=== Qwen/Qwen2.5-0.5B/lr3e-5_t150k ===
+S_core versus B3_pairs [exploratory] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  acq_direct: -0.150 CI[-0.267, -0.033] seeds=1
+  acq_reverse: +0.017 CI[-0.033, +0.067] seeds=1
+  acq_alias: +0.033 CI[-0.083, +0.150] seeds=1
+  acq_twohop: -0.067 CI[-0.200, +0.083] seeds=1
+  supersede: -0.133 CI[-0.400, +0.133] seeds=1
+  ret_real: +0.427 CI[+0.347, +0.513] seeds=1
+  stale: -0.067 CI[-0.200, +0.000] seeds=1
+  taught_value_bleed: -0.550 CI[-0.667, -0.417] seeds=1
+  false_recall_any_specific: +0.000 CI[+0.000, +0.000] seeds=1
+  drift_generic: -0.631 CI[-0.712, -0.553] seeds=1
+S_core versus B3_replay [exploratory] (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  acq_direct: not available
+  acq_reverse: not available
+  acq_alias: not available
+  acq_twohop: not available
+  supersede: not available
+  ret_real: not available
+  stale: not available
+  taught_value_bleed: not available
+  false_recall_any_specific: not available
+  drift_generic: not available
+
+Validity (acceptance, unscored fraction, integrate count, budget spent)
+arm | seeds | acceptance | unscored | gate_rate | chains_per_night | integrate_per_night | spent_fraction | unspent_per_night | control_drop
+--- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_derived | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.998 | 228.000 | -
+B3_pairs | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 0.000 | 0.999 | 145.333 | -
+B4_replay_kl | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.998 | 283.333 | -
+B4q | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.997 | 427.667 | -
+B4q_compact | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.998 | 327.000 | -
+B4q_idk | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.998 | 329.667 | -
+B4q_r8 | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.997 | 427.667 | -
+S_core | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 121.667 | 0.996 | 551.667 | -
+S_coreq | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 143.667 | 0.994 | 915.667 | -
+S_oracleq | 1 | 1.000 | 0.000 | 0.000 | 27.667 | 277.333 | 0.995 | 804.000 | -
+
+Anchor drift increase per night, nats per token (E1 sets max_anchor_drift from this)
+arm | nights | min | median | p90 | max
+--- | --- | --- | --- | --- | ---
+S_core | 3 | -0.145 | 0.013 | 0.144 | 0.144
+S_coreq | 3 | -0.228 | -0.053 | 0.158 | 0.158
+S_oracleq | 3 | -0.127 | -0.085 | 0.158 | 0.158
+
+Hypotheses
+  H2_reverse: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_alias: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_twohop: not supported [exploratory] p_holm=1.000 diff=-0.067 CI[-0.200, +0.083] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  H3: withdrawn [exploratory] (A2.1: withdrawn unless E0b restores selection)
+  H4: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H5: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H6: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H7: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H2: missing [exploratory] (all three H2 members must hold)
+  H8: not measured [exploratory] only 0 facts would have retired; 20 needed (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H9: not measured [exploratory] (needs a same-night conflict world)
+
+H8's log for S_core, per seed and night: gap vs. correctness, and change against the controls
+seed | night | taught | tonight | controls | auroc_probe | auroc_heldout | auroc_probe_before | within_fact_auroc | within_fact_auroc_heldout | gap_vs_correct_change | mean_gap_change | control_mean_gap_change | mean_correct_before | mean_correct_after | control_correct_before | control_correct_after | regression_slope | control_regression_slope | taught_net_of_control
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+7 | 0 | 49 | 49 | 40 | - | - | - | - | - | - | -0.388 | -0.286 | 0.000 | 0.000 | 0.000 | 0.025 | -0.424 | -0.373 | -0.097
+7 | 1 | 97 | 53 | 40 | - | - | - | - | - | - | -0.001 | -0.275 | 0.000 | 0.000 | 0.025 | 0.000 | -0.149 | -0.124 | 0.205
+7 | 2 | 150 | 59 | 40 | 0.920 | 0.679 | - | 0.719 | - | -0.091 | -0.297 | -0.232 | 0.000 | 0.034 | 0.000 | 0.050 | -0.203 | -0.277 | -0.022
+
+Arms at the final night (means over seeds)
+arm | seeds | acq_direct | acq_direct_lift | acq_reverse | acq_reverse_lift | acq_alias | acq_alias_lift | acq_twohop | acq_twohop_lift | acq_implied | supersede | stale | preservation | taught_value_bleed | false_recall_any_specific | false_recall_neighbour | ret_real | ret_real_head | ret_real_tail | drift_generic | delta_norm | delta_rank | style_length | style_artefact
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_derived | 1 | 0.117 | 0.083 | 0.033 | 0.017 | 0.150 | 0.133 | 0.100 | 0.050 | 0.094 | 0.200 | 0.067 | 0.033 | 0.900 | 1.000 | 0.033 | 0.087 | 0.120 | 0.053 | 0.857 | 2.778 | 16127.000 | 5.404 | 0.000
+B3_pairs | 1 | 0.167 | 0.133 | 0.017 | -0.017 | 0.117 | 0.050 | 0.050 | 0.000 | 0.061 | 0.200 | 0.133 | 0.100 | 0.933 | 1.000 | 0.133 | 0.087 | 0.160 | 0.013 | 0.852 | 2.792 | 16128.000 | 5.450 | 0.000
+B4_replay_kl | 1 | 0.050 | 0.033 | 0.017 | 0.000 | 0.100 | 0.067 | 0.050 | -0.033 | 0.056 | 0.067 | 0.200 | 0.050 | 0.617 | 1.000 | 0.083 | 0.360 | 0.520 | 0.200 | 0.061 | 1.942 | 16128.000 | 5.812 | 0.000
+B4q | 1 | 0.017 | 0.000 | 0.000 | 0.000 | 0.100 | 0.100 | 0.000 | -0.100 | 0.033 | 0.000 | 0.200 | 0.000 | 0.467 | 1.000 | 0.017 | 0.660 | 0.773 | 0.547 | 0.107 | 1.891 | 16128.000 | 7.675 | 0.000
+B4q_compact | 1 | 0.017 | 0.000 | 0.017 | 0.017 | 0.067 | 0.067 | 0.000 | -0.100 | 0.028 | 0.000 | 0.133 | 0.000 | 0.383 | 1.000 | 0.017 | 0.687 | 0.800 | 0.573 | 0.112 | 1.695 | 25345.000 | 7.662 | 0.000
+B4q_idk | 1 | 0.017 | 0.017 | 0.000 | 0.000 | 0.033 | 0.033 | 0.000 | 0.000 | 0.011 | 0.000 | 0.000 | 0.000 | 0.517 | 0.667 | 0.000 | 0.660 | 0.787 | 0.533 | 0.107 | 1.805 | 16128.000 | 7.096 | 0.000
+B4q_r8 | 1 | 0.000 | -0.017 | 0.000 | 0.000 | 0.033 | 0.017 | 0.000 | 0.000 | 0.011 | 0.000 | 0.000 | 0.000 | 0.300 | 1.000 | 0.000 | 0.713 | 0.853 | 0.573 | 0.084 | 1.329 | 4032.000 | 8.421 | 0.000
+S_core | 1 | 0.017 | -0.017 | 0.000 | 0.000 | 0.100 | 0.083 | 0.050 | -0.067 | 0.050 | 0.000 | 0.067 | 0.000 | 0.383 | 1.000 | 0.000 | 0.513 | 0.627 | 0.400 | 0.221 | 1.420 | 25456.000 | 6.154 | 0.000
+S_coreq | 1 | 0.050 | 0.017 | 0.017 | 0.017 | 0.067 | 0.050 | 0.033 | -0.083 | 0.039 | 0.067 | 0.067 | 0.017 | 0.567 | 1.000 | 0.000 | 0.520 | 0.693 | 0.347 | 0.162 | 1.395 | 25268.000 | 6.638 | 0.000
+S_oracleq | 1 | 0.083 | 0.050 | 0.000 | 0.000 | 0.117 | 0.117 | 0.050 | -0.033 | 0.056 | 0.000 | 0.000 | 0.033 | 0.567 | 1.000 | 0.000 | 0.473 | 0.600 | 0.347 | 0.230 | 1.564 | 25185.000 | 6.567 | 0.000
+
+Direct accuracy by fact age, at the final night
+arm | age_0 | age_1 | age_2
+--- | --- | --- | ---
+B3_derived | 0.091 | 0.208 | 0.111
+B3_pairs | 0.182 | 0.208 | 0.111
+B4_replay_kl | 0.030 | 0.042 | 0.111
+B4q | 0.030 | 0.000 | 0.000
+B4q_compact | 0.030 | 0.000 | 0.000
+B4q_idk | 0.000 | 0.042 | 0.000
+B4q_r8 | 0.000 | 0.000 | 0.000
+S_core | 0.030 | 0.000 | 0.000
+S_coreq | 0.091 | 0.042 | 0.000
+S_oracleq | 0.091 | 0.042 | 0.056
+
+Pilot checks: {'best_acq_implied': 0.09444444444444444, 'kill_no_arm_reaches_0.5_implied': True, 'B3_acq_direct': None, 'B3_reaches_0.7_direct': False}
+
+=== Qwen/Qwen2.5-0.5B/lr3e-5_t400k ===
+S_core versus B3_pairs [exploratory] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  acq_direct: -0.633 CI[-0.767, -0.500] seeds=1
+  acq_reverse: -0.517 CI[-0.650, -0.400] seeds=1
+  acq_alias: +0.050 CI[-0.100, +0.200] seeds=1
+  acq_twohop: -0.017 CI[-0.133, +0.100] seeds=1
+  supersede: -0.933 CI[-1.133, -0.733] seeds=1
+  ret_real: +0.340 CI[+0.267, +0.420] seeds=1
+  stale: +0.067 CI[-0.133, +0.267] seeds=1
+  taught_value_bleed: -0.100 CI[-0.200, +0.000] seeds=1
+  false_recall_any_specific: +0.000 CI[+0.000, +0.000] seeds=1
+  drift_generic: -0.950 CI[-1.071, -0.838] seeds=1
+S_core versus B3_replay [exploratory] (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  acq_direct: not available
+  acq_reverse: not available
+  acq_alias: not available
+  acq_twohop: not available
+  supersede: not available
+  ret_real: not available
+  stale: not available
+  taught_value_bleed: not available
+  false_recall_any_specific: not available
+  drift_generic: not available
+
+Validity (acceptance, unscored fraction, integrate count, budget spent)
+arm | seeds | acceptance | unscored | gate_rate | chains_per_night | integrate_per_night | spent_fraction | unspent_per_night | control_drop
+--- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_derived | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.999 | 218.000 | -
+B3_pairs | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 0.000 | 0.999 | 212.667 | -
+B4_replay_kl | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 1.000 | 191.000 | -
+B4q | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.999 | 235.000 | -
+B4q_compact | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.992 | 3387.000 | -
+B4q_idk | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.998 | 676.333 | -
+B4q_r8 | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.999 | 235.000 | -
+S_core | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 240.667 | 0.989 | 4535.333 | -
+S_coreq | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 305.000 | 0.989 | 4542.667 | -
+S_oracleq | 1 | 1.000 | 0.000 | 0.000 | 27.667 | 277.333 | 0.989 | 4460.333 | -
+
+Anchor drift increase per night, nats per token (E1 sets max_anchor_drift from this)
+arm | nights | min | median | p90 | max
+--- | --- | --- | --- | --- | ---
+S_core | 3 | 0.001 | 0.024 | 0.266 | 0.266
+S_coreq | 3 | -0.176 | 0.075 | 0.269 | 0.269
+S_oracleq | 3 | -0.089 | -0.069 | 0.152 | 0.152
+
+Hypotheses
+  H2_reverse: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_alias: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_twohop: not supported [exploratory] p_holm=1.000 diff=-0.017 CI[-0.133, +0.100] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  H3: withdrawn [exploratory] (A2.1: withdrawn unless E0b restores selection)
+  H4: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H5: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H6: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H7: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H2: missing [exploratory] (all three H2 members must hold)
+  H8: not measured [exploratory] only 0 facts would have retired; 20 needed (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H9: not measured [exploratory] (needs a same-night conflict world)
+
+H8's log for S_core, per seed and night: gap vs. correctness, and change against the controls
+seed | night | taught | tonight | controls | auroc_probe | auroc_heldout | auroc_probe_before | within_fact_auroc | within_fact_auroc_heldout | gap_vs_correct_change | mean_gap_change | control_mean_gap_change | mean_correct_before | mean_correct_after | control_correct_before | control_correct_after | regression_slope | control_regression_slope | taught_net_of_control
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+7 | 0 | 49 | 49 | 40 | 0.854 | - | - | 0.292 | - | 0.092 | -1.329 | -0.962 | 0.000 | 0.020 | 0.000 | 0.050 | -0.834 | -0.621 | -0.357
+7 | 1 | 97 | 53 | 40 | 0.918 | 0.811 | - | 0.620 | 0.553 | -0.096 | -0.242 | -0.216 | 0.000 | 0.057 | 0.050 | 0.050 | -0.338 | -0.315 | 0.002
+7 | 2 | 150 | 59 | 40 | 0.817 | 0.580 | 0.772 | 0.497 | 0.933 | -0.034 | -0.891 | -0.383 | 0.034 | 0.102 | 0.050 | 0.050 | -0.553 | -0.406 | -0.229
+
+Arms at the final night (means over seeds)
+arm | seeds | acq_direct | acq_direct_lift | acq_reverse | acq_reverse_lift | acq_alias | acq_alias_lift | acq_twohop | acq_twohop_lift | acq_implied | supersede | stale | preservation | taught_value_bleed | false_recall_any_specific | false_recall_neighbour | ret_real | ret_real_head | ret_real_tail | drift_generic | delta_norm | delta_rank | style_length | style_artefact
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_derived | 1 | 0.800 | 0.800 | 0.400 | 0.383 | 0.333 | 0.283 | 0.400 | 0.383 | 0.378 | 0.867 | 0.000 | 0.867 | 0.933 | 1.000 | 0.500 | 0.093 | 0.173 | 0.013 | 1.064 | 3.985 | 16128.000 | 5.162 | 0.000
+B3_pairs | 1 | 0.767 | 0.767 | 0.550 | 0.550 | 0.167 | 0.083 | 0.033 | 0.017 | 0.250 | 0.867 | 0.067 | 0.817 | 0.883 | 1.000 | 0.317 | 0.120 | 0.227 | 0.013 | 1.224 | 4.008 | 16128.000 | 5.237 | 0.000
+B4_replay_kl | 1 | 0.217 | 0.200 | 0.050 | 0.033 | 0.117 | 0.083 | 0.033 | -0.017 | 0.067 | 0.333 | 0.067 | 0.150 | 0.783 | 1.000 | 0.067 | 0.360 | 0.507 | 0.213 | 0.033 | 2.916 | 16128.000 | 5.704 | 0.000
+B4q | 1 | 0.133 | 0.100 | 0.050 | 0.050 | 0.083 | 0.083 | 0.033 | 0.017 | 0.056 | 0.267 | 0.133 | 0.100 | 0.800 | 1.000 | 0.117 | 0.780 | 0.893 | 0.667 | 0.097 | 2.870 | 16128.000 | 6.529 | 0.000
+B4q_compact | 1 | 0.117 | 0.083 | 0.033 | 0.033 | 0.100 | 0.100 | 0.033 | 0.017 | 0.056 | 0.267 | 0.133 | 0.067 | 0.783 | 1.000 | 0.083 | 0.793 | 0.920 | 0.667 | 0.092 | 2.617 | 23064.000 | 6.562 | 0.000
+B4q_idk | 1 | 0.117 | 0.100 | 0.000 | 0.000 | 0.067 | 0.067 | 0.000 | -0.017 | 0.022 | 0.200 | 0.133 | 0.050 | 0.617 | 0.633 | 0.067 | 0.753 | 0.893 | 0.613 | 0.094 | 2.778 | 16128.000 | 6.679 | 0.000
+B4q_r8 | 1 | 0.067 | 0.050 | 0.017 | 0.017 | 0.117 | 0.117 | 0.017 | -0.100 | 0.050 | 0.000 | 0.200 | 0.083 | 0.617 | 1.000 | 0.083 | 0.693 | 0.827 | 0.560 | 0.079 | 2.329 | 4032.000 | 6.621 | 0.000
+S_core | 1 | 0.150 | 0.133 | 0.033 | 0.033 | 0.167 | 0.133 | 0.083 | 0.000 | 0.094 | 0.000 | 0.133 | 0.117 | 0.783 | 1.000 | 0.083 | 0.460 | 0.613 | 0.307 | 0.273 | 2.539 | 24052.000 | 5.229 | 0.000
+S_coreq | 1 | 0.150 | 0.100 | 0.033 | 0.017 | 0.150 | 0.083 | 0.100 | 0.050 | 0.094 | 0.133 | 0.133 | 0.133 | 0.783 | 1.000 | 0.100 | 0.493 | 0.640 | 0.347 | 0.141 | 2.358 | 24463.000 | 5.763 | 0.000
+S_oracleq | 1 | 0.200 | 0.183 | 0.017 | -0.017 | 0.167 | 0.133 | 0.100 | 0.050 | 0.094 | 0.200 | 0.200 | 0.117 | 0.833 | 1.000 | 0.067 | 0.507 | 0.640 | 0.373 | 0.193 | 2.634 | 23664.000 | 6.112 | 0.000
+
+Direct accuracy by fact age, at the final night
+arm | age_0 | age_1 | age_2
+--- | --- | --- | ---
+B3_derived | 0.727 | 0.917 | 0.833
+B3_pairs | 0.667 | 0.833 | 0.944
+B4_replay_kl | 0.182 | 0.250 | 0.333
+B4q | 0.091 | 0.208 | 0.222
+B4q_compact | 0.121 | 0.125 | 0.222
+B4q_idk | 0.121 | 0.167 | 0.111
+B4q_r8 | 0.030 | 0.000 | 0.167
+S_core | 0.121 | 0.125 | 0.111
+S_coreq | 0.121 | 0.167 | 0.167
+S_oracleq | 0.212 | 0.208 | 0.167
+
+Pilot checks: {'best_acq_implied': 0.37777777777777777, 'kill_no_arm_reaches_0.5_implied': True, 'B3_acq_direct': None, 'B3_reaches_0.7_direct': False}
+
+=== Qwen/Qwen2.5-0.5B/lr3e-5_t50k ===
+S_core versus B3_pairs [exploratory] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  acq_direct: +0.000 CI[-0.067, +0.067] seeds=1
+  acq_reverse: +0.000 CI[+0.000, +0.000] seeds=1
+  acq_alias: -0.100 CI[-0.200, -0.017] seeds=1
+  acq_twohop: +0.067 CI[-0.017, +0.150] seeds=1
+  supersede: +0.000 CI[-0.200, +0.200] seeds=1
+  ret_real: +0.527 CI[+0.440, +0.607] seeds=1
+  stale: +0.000 CI[+0.000, +0.000] seeds=1
+  taught_value_bleed: -0.350 CI[-0.467, -0.233] seeds=1
+  false_recall_any_specific: +0.000 CI[+0.000, +0.000] seeds=1
+  drift_generic: -0.369 CI[-0.409, -0.330] seeds=1
+S_core versus B3_replay [exploratory] (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  acq_direct: not available
+  acq_reverse: not available
+  acq_alias: not available
+  acq_twohop: not available
+  supersede: not available
+  ret_real: not available
+  stale: not available
+  taught_value_bleed: not available
+  false_recall_any_specific: not available
+  drift_generic: not available
+
+Validity (acceptance, unscored fraction, integrate count, budget spent)
+arm | seeds | acceptance | unscored | gate_rate | chains_per_night | integrate_per_night | spent_fraction | unspent_per_night | control_drop
+--- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_derived | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.996 | 222.000 | -
+B3_pairs | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 0.000 | 0.994 | 276.000 | -
+B4_replay_kl | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.990 | 492.000 | -
+B4q | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.993 | 337.000 | -
+B4q_compact | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.992 | 424.333 | -
+B4q_idk | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.995 | 243.667 | -
+B4q_r8 | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.993 | 337.000 | -
+S_core | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 48.667 | 0.995 | 270.667 | -
+S_coreq | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 49.000 | 0.988 | 579.667 | -
+S_oracleq | 1 | 0.667 | 0.000 | 0.000 | 27.667 | 277.333 | 0.986 | 720.000 | -
+
+Anchor drift increase per night, nats per token (E1 sets max_anchor_drift from this)
+arm | nights | min | median | p90 | max
+--- | --- | --- | --- | --- | ---
+S_core | 3 | -0.245 | -0.076 | 0.065 | 0.065
+S_coreq | 3 | -0.222 | -0.062 | 0.157 | 0.157
+S_oracleq | 2 | -0.093 | 0.047 | 0.047 | 0.047
+
+Hypotheses
+  H2_reverse: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_alias: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_twohop: not supported [exploratory] p_holm=1.000 diff=+0.067 CI[-0.017, +0.150] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  H3: withdrawn [exploratory] (A2.1: withdrawn unless E0b restores selection)
+  H4: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H5: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H6: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H7: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H2: missing [exploratory] (all three H2 members must hold)
+  H8: missing [exploratory] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H9: not measured [exploratory] (needs a same-night conflict world)
+
+H8's log for S_core, per seed and night: gap vs. correctness, and change against the controls
+seed | night | taught | tonight | controls | auroc_probe | auroc_heldout | auroc_probe_before | within_fact_auroc | within_fact_auroc_heldout | gap_vs_correct_change | mean_gap_change | control_mean_gap_change | mean_correct_before | mean_correct_after | control_correct_before | control_correct_after | regression_slope | control_regression_slope | taught_net_of_control
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+7 | 0 | 49 | 49 | 40 | - | - | - | - | - | - | -0.384 | -0.516 | 0.000 | 0.000 | 0.000 | 0.000 | -0.281 | -0.303 | 0.136
+7 | 1 | 97 | 53 | 40 | - | - | - | - | - | - | 0.347 | 0.592 | 0.000 | 0.000 | 0.000 | 0.000 | -0.132 | 0.052 | -0.219
+7 | 2 | 150 | 59 | 40 | - | - | - | - | - | - | 0.142 | 0.180 | 0.000 | 0.000 | 0.000 | 0.025 | -0.196 | -0.050 | -0.038
+
+Arms at the final night (means over seeds)
+arm | seeds | acq_direct | acq_direct_lift | acq_reverse | acq_reverse_lift | acq_alias | acq_alias_lift | acq_twohop | acq_twohop_lift | acq_implied | supersede | stale | preservation | taught_value_bleed | false_recall_any_specific | false_recall_neighbour | ret_real | ret_real_head | ret_real_tail | drift_generic | delta_norm | delta_rank | style_length | style_artefact
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_derived | 1 | 0.033 | 0.017 | 0.000 | -0.017 | 0.100 | 0.067 | 0.017 | 0.000 | 0.039 | 0.067 | 0.067 | 0.050 | 0.550 | 1.000 | 0.067 | 0.167 | 0.293 | 0.040 | 0.446 | 1.755 | 16128.000 | 5.646 | 0.000
+B3_pairs | 1 | 0.033 | 0.000 | 0.000 | 0.000 | 0.100 | 0.100 | 0.033 | -0.067 | 0.044 | 0.067 | 0.000 | 0.050 | 0.633 | 1.000 | 0.033 | 0.187 | 0.333 | 0.040 | 0.441 | 1.793 | 16128.000 | 5.300 | 0.000
+B4_replay_kl | 1 | 0.000 | 0.000 | 0.000 | 0.000 | 0.033 | 0.017 | 0.000 | 0.000 | 0.011 | 0.000 | 0.000 | 0.000 | 0.300 | 1.000 | 0.000 | 0.527 | 0.667 | 0.387 | 0.063 | 1.017 | 16128.000 | 6.171 | 0.000
+B4q | 1 | 0.000 | 0.000 | 0.000 | 0.000 | 0.017 | 0.000 | 0.000 | 0.000 | 0.006 | 0.000 | 0.000 | 0.000 | 0.300 | 1.000 | 0.000 | 0.767 | 0.867 | 0.667 | 0.090 | 0.986 | 16128.000 | 10.412 | 0.000
+B4q_compact | 1 | 0.000 | 0.000 | 0.000 | 0.000 | 0.017 | 0.000 | 0.000 | 0.000 | 0.006 | 0.000 | 0.000 | 0.000 | 0.300 | 1.000 | 0.000 | 0.773 | 0.867 | 0.680 | 0.089 | 0.882 | 26450.000 | 9.062 | 0.000
+B4q_idk | 1 | 0.000 | 0.000 | 0.000 | 0.000 | 0.017 | 0.017 | 0.000 | 0.000 | 0.006 | 0.000 | 0.000 | 0.000 | 0.283 | 0.783 | 0.000 | 0.767 | 0.867 | 0.667 | 0.083 | 0.932 | 16128.000 | 10.113 | 0.000
+B4q_r8 | 1 | 0.000 | 0.000 | 0.000 | 0.000 | 0.017 | 0.017 | 0.000 | 0.000 | 0.006 | 0.000 | 0.000 | 0.000 | 0.283 | 1.000 | 0.000 | 0.813 | 0.920 | 0.707 | 0.017 | 0.589 | 4032.000 | 12.642 | 0.000
+S_core | 1 | 0.000 | 0.000 | 0.000 | 0.000 | 0.017 | 0.000 | 0.000 | 0.000 | 0.006 | 0.000 | 0.000 | 0.000 | 0.283 | 1.000 | 0.000 | 0.713 | 0.853 | 0.573 | 0.073 | 0.783 | 26445.000 | 8.992 | 0.000
+S_coreq | 1 | 0.000 | 0.000 | 0.000 | 0.000 | 0.033 | 0.017 | 0.000 | 0.000 | 0.011 | 0.000 | 0.000 | 0.000 | 0.283 | 1.000 | 0.017 | 0.733 | 0.867 | 0.600 | 0.059 | 0.699 | 26955.000 | 9.367 | 0.000
+S_oracleq | 1 | 0.000 | 0.000 | 0.000 | 0.000 | 0.017 | 0.017 | 0.000 | 0.000 | 0.006 | 0.000 | 0.000 | 0.000 | 0.283 | 1.000 | 0.033 | 0.773 | 0.880 | 0.667 | 0.042 | 0.619 | 20136.000 | 10.108 | 0.000
+
+Direct accuracy by fact age, at the final night
+arm | age_0 | age_1 | age_2
+--- | --- | --- | ---
+B3_derived | 0.000 | 0.042 | 0.111
+B3_pairs | 0.030 | 0.042 | 0.056
+B4_replay_kl | 0.000 | 0.000 | 0.000
+B4q | 0.000 | 0.000 | 0.000
+B4q_compact | 0.000 | 0.000 | 0.000
+B4q_idk | 0.000 | 0.000 | 0.000
+B4q_r8 | 0.000 | 0.000 | 0.000
+S_core | 0.000 | 0.000 | 0.000
+S_coreq | 0.000 | 0.000 | 0.000
+S_oracleq | 0.000 | 0.000 | 0.000
+
+Pilot checks: {'best_acq_implied': 0.044444444444444446, 'kill_no_arm_reaches_0.5_implied': True, 'B3_acq_direct': None, 'B3_reaches_0.7_direct': False}
+
+=== E1b, across settings (exploratory, one seed) ===
+
+Each arm, setting and night
+arm | setting | night | acq_direct | ret_real | false_recall_neighbour
+--- | --- | --- | --- | --- | ---
+B3_derived | lr1e-4_t150k | 0 | 0.717 | 0.100 | 0.267
+B3_derived | lr1e-4_t150k | 1 | 0.917 | 0.107 | 0.600
+B3_derived | lr1e-4_t150k | 2 | 0.917 | 0.093 | 0.750
+B3_derived | lr1e-4_t50k | 0 | 0.133 | 0.020 | 0.017
+B3_derived | lr1e-4_t50k | 1 | 0.117 | 0.080 | 0.167
+B3_derived | lr1e-4_t50k | 2 | 0.067 | 0.073 | 0.150
+B3_derived | lr1e-5_t150k | 0 | 0.017 | 0.320 | 0.000
+B3_derived | lr1e-5_t150k | 1 | 0.017 | 0.173 | 0.033
+B3_derived | lr1e-5_t150k | 2 | 0.033 | 0.113 | 0.100
+B3_derived | lr1e-5_t400k | 0 | 0.150 | 0.087 | 0.133
+B3_derived | lr1e-5_t400k | 1 | 0.117 | 0.093 | 0.150
+B3_derived | lr1e-5_t400k | 2 | 0.133 | 0.067 | 0.083
+B3_derived | lr1e-5_t50k | 0 | 0.000 | 0.660 | 0.033
+B3_derived | lr1e-5_t50k | 1 | 0.000 | 0.533 | 0.017
+B3_derived | lr1e-5_t50k | 2 | 0.000 | 0.447 | 0.000
+B3_derived | lr3e-5_t150k | 0 | 0.167 | 0.100 | 0.067
+B3_derived | lr3e-5_t150k | 1 | 0.133 | 0.100 | 0.083
+B3_derived | lr3e-5_t150k | 2 | 0.117 | 0.087 | 0.033
+B3_derived | lr3e-5_t400k | 0 | 0.750 | 0.113 | 0.250
+B3_derived | lr3e-5_t400k | 1 | 0.833 | 0.127 | 0.450
+B3_derived | lr3e-5_t400k | 2 | 0.800 | 0.093 | 0.500
+B3_derived | lr3e-5_t50k | 0 | 0.000 | 0.327 | 0.000
+B3_derived | lr3e-5_t50k | 1 | 0.000 | 0.180 | 0.017
+B3_derived | lr3e-5_t50k | 2 | 0.033 | 0.167 | 0.067
+B3_pairs | lr1e-4_t150k | 0 | 0.767 | 0.147 | 0.283
+B3_pairs | lr1e-4_t150k | 1 | 0.917 | 0.113 | 0.450
+B3_pairs | lr1e-4_t150k | 2 | 0.883 | 0.100 | 0.583
+B3_pairs | lr1e-4_t50k | 0 | 0.167 | 0.087 | 0.117
+B3_pairs | lr1e-4_t50k | 1 | 0.167 | 0.113 | 0.150
+B3_pairs | lr1e-4_t50k | 2 | 0.167 | 0.080 | 0.150
+B3_pairs | lr1e-5_t150k | 0 | 0.000 | 0.400 | 0.000
+B3_pairs | lr1e-5_t150k | 1 | 0.017 | 0.227 | 0.033
+B3_pairs | lr1e-5_t150k | 2 | 0.033 | 0.160 | 0.033
+B3_pairs | lr1e-5_t400k | 0 | 0.133 | 0.120 | 0.117
+B3_pairs | lr1e-5_t400k | 1 | 0.183 | 0.120 | 0.133
+B3_pairs | lr1e-5_t400k | 2 | 0.167 | 0.107 | 0.083
+B3_pairs | lr1e-5_t50k | 0 | 0.000 | 0.693 | 0.033
+B3_pairs | lr1e-5_t50k | 1 | 0.000 | 0.620 | 0.033
+B3_pairs | lr1e-5_t50k | 2 | 0.000 | 0.507 | 0.017
+B3_pairs | lr3e-5_t150k | 0 | 0.183 | 0.120 | 0.117
+B3_pairs | lr3e-5_t150k | 1 | 0.150 | 0.113 | 0.100
+B3_pairs | lr3e-5_t150k | 2 | 0.167 | 0.087 | 0.133
+B3_pairs | lr3e-5_t400k | 0 | 0.800 | 0.127 | 0.200
+B3_pairs | lr3e-5_t400k | 1 | 0.767 | 0.120 | 0.367
+B3_pairs | lr3e-5_t400k | 2 | 0.767 | 0.120 | 0.317
+B3_pairs | lr3e-5_t50k | 0 | 0.000 | 0.413 | 0.000
+B3_pairs | lr3e-5_t50k | 1 | 0.000 | 0.240 | 0.017
+B3_pairs | lr3e-5_t50k | 2 | 0.033 | 0.187 | 0.033
+B4_replay_kl | lr1e-4_t150k | 0 | 0.217 | 0.327 | 0.083
+B4_replay_kl | lr1e-4_t150k | 1 | 0.150 | 0.373 | 0.117
+B4_replay_kl | lr1e-4_t150k | 2 | 0.200 | 0.367 | 0.083
+B4_replay_kl | lr1e-4_t50k | 0 | 0.000 | 0.380 | 0.000
+B4_replay_kl | lr1e-4_t50k | 1 | 0.017 | 0.400 | 0.017
+B4_replay_kl | lr1e-4_t50k | 2 | 0.033 | 0.360 | 0.067
+B4_replay_kl | lr1e-5_t150k | 0 | 0.000 | 0.667 | 0.033
+B4_replay_kl | lr1e-5_t150k | 1 | 0.000 | 0.573 | 0.017
+B4_replay_kl | lr1e-5_t150k | 2 | 0.000 | 0.520 | 0.000
+B4_replay_kl | lr1e-5_t400k | 0 | 0.017 | 0.473 | 0.000
+B4_replay_kl | lr1e-5_t400k | 1 | 0.017 | 0.387 | 0.050
+B4_replay_kl | lr1e-5_t400k | 2 | 0.050 | 0.327 | 0.067
+B4_replay_kl | lr1e-5_t50k | 0 | 0.000 | 0.733 | 0.017
+B4_replay_kl | lr1e-5_t50k | 1 | 0.000 | 0.727 | 0.033
+B4_replay_kl | lr1e-5_t50k | 2 | 0.000 | 0.693 | 0.033
+B4_replay_kl | lr3e-5_t150k | 0 | 0.000 | 0.427 | 0.000
+B4_replay_kl | lr3e-5_t150k | 1 | 0.033 | 0.380 | 0.017
+B4_replay_kl | lr3e-5_t150k | 2 | 0.050 | 0.360 | 0.083
+B4_replay_kl | lr3e-5_t400k | 0 | 0.200 | 0.353 | 0.100
+B4_replay_kl | lr3e-5_t400k | 1 | 0.167 | 0.367 | 0.100
+B4_replay_kl | lr3e-5_t400k | 2 | 0.217 | 0.360 | 0.067
+B4_replay_kl | lr3e-5_t50k | 0 | 0.000 | 0.660 | 0.033
+B4_replay_kl | lr3e-5_t50k | 1 | 0.000 | 0.600 | 0.000
+B4_replay_kl | lr3e-5_t50k | 2 | 0.000 | 0.527 | 0.000
+B4q | lr1e-4_t150k | 0 | 0.150 | 0.633 | 0.133
+B4q | lr1e-4_t150k | 1 | 0.150 | 0.740 | 0.133
+B4q | lr1e-4_t150k | 2 | 0.150 | 0.747 | 0.050
+B4q | lr1e-4_t50k | 0 | 0.000 | 0.667 | 0.000
+B4q | lr1e-4_t50k | 1 | 0.017 | 0.700 | 0.017
+B4q | lr1e-4_t50k | 2 | 0.033 | 0.640 | 0.050
+B4q | lr1e-5_t150k | 0 | 0.000 | 0.780 | 0.000
+B4q | lr1e-5_t150k | 1 | 0.000 | 0.780 | 0.000
+B4q | lr1e-5_t150k | 2 | 0.000 | 0.787 | 0.000
+B4q | lr1e-5_t400k | 0 | 0.000 | 0.713 | 0.000
+B4q | lr1e-5_t400k | 1 | 0.000 | 0.693 | 0.000
+B4q | lr1e-5_t400k | 2 | 0.033 | 0.687 | 0.033
+B4q | lr1e-5_t50k | 0 | 0.000 | 0.807 | 0.000
+B4q | lr1e-5_t50k | 1 | 0.000 | 0.793 | 0.000
+B4q | lr1e-5_t50k | 2 | 0.000 | 0.800 | 0.000
+B4q | lr3e-5_t150k | 0 | 0.000 | 0.693 | 0.000
+B4q | lr3e-5_t150k | 1 | 0.017 | 0.713 | 0.000
+B4q | lr3e-5_t150k | 2 | 0.017 | 0.660 | 0.017
+B4q | lr3e-5_t400k | 0 | 0.167 | 0.700 | 0.133
+B4q | lr3e-5_t400k | 1 | 0.133 | 0.747 | 0.150
+B4q | lr3e-5_t400k | 2 | 0.133 | 0.780 | 0.117
+B4q | lr3e-5_t50k | 0 | 0.000 | 0.800 | 0.000
+B4q | lr3e-5_t50k | 1 | 0.000 | 0.753 | 0.000
+B4q | lr3e-5_t50k | 2 | 0.000 | 0.767 | 0.000
+B4q_compact | lr1e-4_t150k | 0 | 0.167 | 0.640 | 0.117
+B4q_compact | lr1e-4_t150k | 1 | 0.167 | 0.700 | 0.183
+B4q_compact | lr1e-4_t150k | 2 | 0.150 | 0.753 | 0.100
+B4q_compact | lr1e-4_t50k | 0 | 0.000 | 0.713 | 0.017
+B4q_compact | lr1e-4_t50k | 1 | 0.000 | 0.700 | 0.000
+B4q_compact | lr1e-4_t50k | 2 | 0.033 | 0.680 | 0.050
+B4q_compact | lr1e-5_t150k | 0 | 0.000 | 0.787 | 0.000
+B4q_compact | lr1e-5_t150k | 1 | 0.000 | 0.780 | 0.000
+B4q_compact | lr1e-5_t150k | 2 | 0.000 | 0.793 | 0.000
+B4q_compact | lr1e-5_t400k | 0 | 0.000 | 0.727 | 0.000
+B4q_compact | lr1e-5_t400k | 1 | 0.000 | 0.700 | 0.000
+B4q_compact | lr1e-5_t400k | 2 | 0.033 | 0.720 | 0.033
+B4q_compact | lr1e-5_t50k | 0 | 0.000 | 0.813 | 0.000
+B4q_compact | lr1e-5_t50k | 1 | 0.000 | 0.833 | 0.000
+B4q_compact | lr1e-5_t50k | 2 | 0.000 | 0.807 | 0.000
+B4q_compact | lr3e-5_t150k | 0 | 0.000 | 0.720 | 0.000
+B4q_compact | lr3e-5_t150k | 1 | 0.017 | 0.747 | 0.000
+B4q_compact | lr3e-5_t150k | 2 | 0.017 | 0.687 | 0.017
+B4q_compact | lr3e-5_t400k | 0 | 0.133 | 0.687 | 0.100
+B4q_compact | lr3e-5_t400k | 1 | 0.150 | 0.753 | 0.117
+B4q_compact | lr3e-5_t400k | 2 | 0.117 | 0.793 | 0.083
+B4q_compact | lr3e-5_t50k | 0 | 0.000 | 0.807 | 0.000
+B4q_compact | lr3e-5_t50k | 1 | 0.000 | 0.807 | 0.000
+B4q_compact | lr3e-5_t50k | 2 | 0.000 | 0.773 | 0.000
+B4q_idk | lr1e-4_t150k | 0 | 0.050 | 0.640 | 0.083
+B4q_idk | lr1e-4_t150k | 1 | 0.083 | 0.713 | 0.117
+B4q_idk | lr1e-4_t150k | 2 | 0.033 | 0.680 | 0.083
+B4q_idk | lr1e-4_t50k | 0 | 0.017 | 0.627 | 0.000
+B4q_idk | lr1e-4_t50k | 1 | 0.033 | 0.667 | 0.000
+B4q_idk | lr1e-4_t50k | 2 | 0.017 | 0.653 | 0.033
+B4q_idk | lr1e-5_t150k | 0 | 0.000 | 0.827 | 0.000
+B4q_idk | lr1e-5_t150k | 1 | 0.000 | 0.753 | 0.000
+B4q_idk | lr1e-5_t150k | 2 | 0.000 | 0.733 | 0.000
+B4q_idk | lr1e-5_t400k | 0 | 0.000 | 0.693 | 0.000
+B4q_idk | lr1e-5_t400k | 1 | 0.017 | 0.693 | 0.000
+B4q_idk | lr1e-5_t400k | 2 | 0.017 | 0.680 | 0.000
+B4q_idk | lr1e-5_t50k | 0 | 0.000 | 0.827 | 0.000
+B4q_idk | lr1e-5_t50k | 1 | 0.000 | 0.833 | 0.017
+B4q_idk | lr1e-5_t50k | 2 | 0.000 | 0.847 | 0.017
+B4q_idk | lr3e-5_t150k | 0 | 0.000 | 0.700 | 0.000
+B4q_idk | lr3e-5_t150k | 1 | 0.033 | 0.673 | 0.033
+B4q_idk | lr3e-5_t150k | 2 | 0.017 | 0.660 | 0.000
+B4q_idk | lr3e-5_t400k | 0 | 0.067 | 0.653 | 0.083
+B4q_idk | lr3e-5_t400k | 1 | 0.100 | 0.773 | 0.100
+B4q_idk | lr3e-5_t400k | 2 | 0.117 | 0.753 | 0.067
+B4q_idk | lr3e-5_t50k | 0 | 0.000 | 0.827 | 0.000
+B4q_idk | lr3e-5_t50k | 1 | 0.000 | 0.800 | 0.000
+B4q_idk | lr3e-5_t50k | 2 | 0.000 | 0.767 | 0.000
+B4q_r8 | lr1e-4_t150k | 0 | 0.017 | 0.633 | 0.017
+B4q_r8 | lr1e-4_t150k | 1 | 0.033 | 0.700 | 0.033
+B4q_r8 | lr1e-4_t150k | 2 | 0.083 | 0.660 | 0.067
+B4q_r8 | lr1e-4_t50k | 0 | 0.000 | 0.780 | 0.000
+B4q_r8 | lr1e-4_t50k | 1 | 0.000 | 0.740 | 0.000
+B4q_r8 | lr1e-4_t50k | 2 | 0.000 | 0.747 | 0.000
+B4q_r8 | lr1e-5_t150k | 0 | 0.000 | 0.807 | 0.000
+B4q_r8 | lr1e-5_t150k | 1 | 0.000 | 0.793 | 0.000
+B4q_r8 | lr1e-5_t150k | 2 | 0.000 | 0.807 | 0.000
+B4q_r8 | lr1e-5_t400k | 0 | 0.000 | 0.773 | 0.000
+B4q_r8 | lr1e-5_t400k | 1 | 0.000 | 0.740 | 0.000
+B4q_r8 | lr1e-5_t400k | 2 | 0.000 | 0.733 | 0.000
+B4q_r8 | lr1e-5_t50k | 0 | 0.000 | 0.820 | 0.000
+B4q_r8 | lr1e-5_t50k | 1 | 0.000 | 0.813 | 0.000
+B4q_r8 | lr1e-5_t50k | 2 | 0.000 | 0.807 | 0.000
+B4q_r8 | lr3e-5_t150k | 0 | 0.000 | 0.760 | 0.000
+B4q_r8 | lr3e-5_t150k | 1 | 0.000 | 0.753 | 0.000
+B4q_r8 | lr3e-5_t150k | 2 | 0.000 | 0.713 | 0.000
+B4q_r8 | lr3e-5_t400k | 0 | 0.000 | 0.700 | 0.000
+B4q_r8 | lr3e-5_t400k | 1 | 0.033 | 0.680 | 0.033
+B4q_r8 | lr3e-5_t400k | 2 | 0.067 | 0.693 | 0.083
+B4q_r8 | lr3e-5_t50k | 0 | 0.000 | 0.807 | 0.000
+B4q_r8 | lr3e-5_t50k | 1 | 0.000 | 0.800 | 0.000
+B4q_r8 | lr3e-5_t50k | 2 | 0.000 | 0.813 | 0.000
+S_core | lr1e-4_t150k | 0 | 0.067 | 0.607 | 0.050
+S_core | lr1e-4_t150k | 1 | 0.100 | 0.507 | 0.083
+S_core | lr1e-4_t150k | 2 | 0.183 | 0.447 | 0.083
+S_core | lr1e-4_t50k | 0 | 0.000 | 0.753 | 0.000
+S_core | lr1e-4_t50k | 1 | 0.033 | 0.480 | 0.033
+S_core | lr1e-4_t50k | 2 | 0.017 | 0.427 | 0.000
+S_core | lr1e-5_t150k | 0 | 0.000 | 0.860 | 0.000
+S_core | lr1e-5_t150k | 1 | 0.000 | 0.773 | 0.033
+S_core | lr1e-5_t150k | 2 | 0.000 | 0.680 | 0.033
+S_core | lr1e-5_t400k | 0 | 0.000 | 0.813 | 0.000
+S_core | lr1e-5_t400k | 1 | 0.000 | 0.513 | 0.033
+S_core | lr1e-5_t400k | 2 | 0.050 | 0.480 | 0.017
+S_core | lr1e-5_t50k | 0 | 0.000 | 0.880 | 0.000
+S_core | lr1e-5_t50k | 1 | 0.000 | 0.827 | 0.033
+S_core | lr1e-5_t50k | 2 | 0.000 | 0.807 | 0.033
+S_core | lr3e-5_t150k | 0 | 0.000 | 0.813 | 0.000
+S_core | lr3e-5_t150k | 1 | 0.017 | 0.620 | 0.017
+S_core | lr3e-5_t150k | 2 | 0.017 | 0.513 | 0.000
+S_core | lr3e-5_t400k | 0 | 0.033 | 0.620 | 0.050
+S_core | lr3e-5_t400k | 1 | 0.133 | 0.433 | 0.083
+S_core | lr3e-5_t400k | 2 | 0.150 | 0.460 | 0.083
+S_core | lr3e-5_t50k | 0 | 0.000 | 0.833 | 0.000
+S_core | lr3e-5_t50k | 1 | 0.000 | 0.733 | 0.000
+S_core | lr3e-5_t50k | 2 | 0.000 | 0.713 | 0.000
+S_coreq | lr1e-4_t150k | 0 | 0.067 | 0.693 | 0.067
+S_coreq | lr1e-4_t150k | 1 | 0.100 | 0.580 | 0.133
+S_coreq | lr1e-4_t150k | 2 | 0.100 | 0.600 | 0.117
+S_coreq | lr1e-4_t50k | 0 | 0.000 | 0.827 | 0.000
+S_coreq | lr1e-4_t50k | 1 | 0.000 | 0.667 | 0.033
+S_coreq | lr1e-4_t50k | 2 | 0.000 | 0.633 | 0.017
+S_coreq | lr1e-5_t150k | 0 | 0.000 | 0.873 | 0.000
+S_coreq | lr1e-5_t150k | 1 | 0.000 | 0.827 | 0.000
+S_coreq | lr1e-5_t150k | 2 | 0.000 | 0.753 | 0.017
+S_coreq | lr1e-5_t400k | 0 | 0.000 | 0.833 | 0.000
+S_coreq | lr1e-5_t400k | 1 | 0.000 | 0.627 | 0.000
+S_coreq | lr1e-5_t400k | 2 | 0.033 | 0.533 | 0.000
+S_coreq | lr1e-5_t50k | 0 | 0.000 | 0.867 | 0.000
+S_coreq | lr1e-5_t50k | 1 | 0.000 | 0.853 | 0.033
+S_coreq | lr1e-5_t50k | 2 | 0.000 | 0.807 | 0.033
+S_coreq | lr3e-5_t150k | 0 | 0.000 | 0.793 | 0.000
+S_coreq | lr3e-5_t150k | 1 | 0.000 | 0.667 | 0.000
+S_coreq | lr3e-5_t150k | 2 | 0.050 | 0.520 | 0.000
+S_coreq | lr3e-5_t400k | 0 | 0.050 | 0.680 | 0.017
+S_coreq | lr3e-5_t400k | 1 | 0.083 | 0.573 | 0.117
+S_coreq | lr3e-5_t400k | 2 | 0.150 | 0.493 | 0.100
+S_coreq | lr3e-5_t50k | 0 | 0.000 | 0.867 | 0.017
+S_coreq | lr3e-5_t50k | 1 | 0.000 | 0.773 | 0.033
+S_coreq | lr3e-5_t50k | 2 | 0.000 | 0.733 | 0.017
+S_oracleq | lr1e-4_t150k | 0 | 0.050 | 0.700 | 0.050
+S_oracleq | lr1e-4_t150k | 1 | 0.167 | 0.613 | 0.133
+S_oracleq | lr1e-4_t150k | 2 | 0.133 | 0.540 | 0.067
+S_oracleq | lr1e-4_t50k | 0 | 0.000 | 0.807 | 0.000
+S_oracleq | lr1e-4_t50k | 1 | 0.000 | 0.807 | 0.000
+S_oracleq | lr1e-4_t50k | 2 | 0.017 | 0.607 | 0.017
+S_oracleq | lr1e-5_t150k | 0 | 0.000 | 0.847 | 0.000
+S_oracleq | lr1e-5_t150k | 1 | 0.017 | 0.740 | 0.017
+S_oracleq | lr1e-5_t150k | 2 | 0.000 | 0.653 | 0.000
+S_oracleq | lr1e-5_t400k | 0 | 0.000 | 0.800 | 0.000
+S_oracleq | lr1e-5_t400k | 1 | 0.000 | 0.593 | 0.033
+S_oracleq | lr1e-5_t400k | 2 | 0.017 | 0.473 | 0.050
+S_oracleq | lr1e-5_t50k | 0 | 0.000 | 0.893 | 0.000
+S_oracleq | lr1e-5_t50k | 1 | 0.000 | 0.893 | 0.000
+S_oracleq | lr1e-5_t50k | 2 | 0.000 | 0.840 | 0.033
+S_oracleq | lr3e-5_t150k | 0 | 0.000 | 0.773 | 0.000
+S_oracleq | lr3e-5_t150k | 1 | 0.033 | 0.540 | 0.000
+S_oracleq | lr3e-5_t150k | 2 | 0.083 | 0.473 | 0.000
+S_oracleq | lr3e-5_t400k | 0 | 0.050 | 0.693 | 0.033
+S_oracleq | lr3e-5_t400k | 1 | 0.150 | 0.533 | 0.100
+S_oracleq | lr3e-5_t400k | 2 | 0.200 | 0.507 | 0.067
+S_oracleq | lr3e-5_t50k | 0 | 0.000 | 0.867 | 0.000
+S_oracleq | lr3e-5_t50k | 1 | 0.000 | 0.867 | 0.000
+S_oracleq | lr3e-5_t50k | 2 | 0.000 | 0.773 | 0.033
+
+A3.4, per arm: highest ret_real with acq_direct at least 0.7
+  B3_derived: lr1e-4_t150k
+  B3_pairs: lr3e-5_t400k
+  B4_replay_kl: no setting qualifies
+  B4q: no setting qualifies
+  B4q_compact: no setting qualifies
+  B4q_idk: no setting qualifies
+  B4q_r8: no setting qualifies
+  S_core: no setting qualifies
+  S_coreq: no setting qualifies
+  S_oracleq: no setting qualifies
+
+A3.4, chosen setting: lr1e-4_t150k, min ret_real 0.100, best sleep arm S_core, acq_direct threshold 0.183 (relaxed from 0.7)
+A4.2, upgrades advancing: none
+
+H10: B4q minus B4_replay_kl: not testable
+setting | ret_real_gap | false_recall_gap | acq_direct_gap | testable | meets
+--- | --- | --- | --- | --- | ---
+lr1e-4_t150k | 0.380 | 0.033 | -0.050 | False | False
+lr1e-4_t50k | 0.280 | 0.017 | 0.000 | False | False
+lr1e-5_t150k | 0.267 | 0.000 | 0.000 | False | False
+lr1e-5_t400k | 0.360 | 0.033 | -0.017 | False | False
+lr1e-5_t50k | 0.107 | 0.033 | 0.000 | False | False
+lr3e-5_t150k | 0.300 | 0.067 | -0.033 | False | False
+lr3e-5_t400k | 0.420 | -0.050 | -0.083 | False | False
+lr3e-5_t50k | 0.240 | 0.000 | 0.000 | False | False
+
+H11: B4q_idk minus B4q: not testable
+setting | ret_real_gap | false_recall_gap | acq_direct_gap | testable | meets
+--- | --- | --- | --- | --- | ---
+lr1e-4_t150k | -0.067 | -0.033 | -0.117 | False | False
+lr1e-4_t50k | 0.013 | 0.017 | -0.017 | False | False
+lr1e-5_t150k | -0.053 | 0.000 | 0.000 | False | False
+lr1e-5_t400k | -0.007 | 0.033 | -0.017 | False | False
+lr1e-5_t50k | 0.047 | -0.017 | 0.000 | False | False
+lr3e-5_t150k | 0.000 | 0.017 | 0.000 | False | False
+lr3e-5_t400k | -0.027 | 0.050 | -0.017 | False | False
+lr3e-5_t50k | 0.000 | 0.000 | 0.000 | False | False
+
+H12: B4q_compact minus B4q: not testable
+setting | ret_real_gap | false_recall_gap | acq_direct_gap | testable | meets
+--- | --- | --- | --- | --- | ---
+lr1e-4_t150k | 0.007 | -0.050 | 0.000 | False | False
+lr1e-4_t50k | 0.040 | 0.000 | 0.000 | False | False
+lr1e-5_t150k | 0.007 | 0.000 | 0.000 | False | False
+lr1e-5_t400k | 0.033 | 0.000 | 0.000 | False | False
+lr1e-5_t50k | 0.007 | 0.000 | 0.000 | False | False
+lr3e-5_t150k | 0.027 | 0.000 | 0.000 | False | False
+lr3e-5_t400k | 0.013 | 0.033 | -0.017 | False | False
+lr3e-5_t50k | 0.007 | 0.000 | 0.000 | False | False
+
+H13: B4q_r8 minus B4q: not testable
+setting | ret_real_gap | false_recall_gap | acq_direct_gap | testable | meets
+--- | --- | --- | --- | --- | ---
+lr1e-4_t150k | -0.087 | -0.017 | -0.067 | False | False
+lr1e-4_t50k | 0.107 | 0.050 | -0.033 | False | True
+lr1e-5_t150k | 0.020 | 0.000 | 0.000 | False | False
+lr1e-5_t400k | 0.047 | 0.033 | -0.033 | False | False
+lr1e-5_t50k | 0.007 | 0.000 | 0.000 | False | False
+lr3e-5_t150k | 0.053 | 0.017 | -0.017 | False | True
+lr3e-5_t400k | -0.087 | 0.033 | -0.067 | False | False
+lr3e-5_t50k | 0.047 | 0.000 | 0.000 | False | False
+
+H8 per setting: AUROC against correctness (held-out gap is A3.7's test, 0.75)
+setting | auroc_heldout | auroc_probe | within_fact_auroc
+--- | --- | --- | ---
+lr1e-4_t150k | 0.583 | 0.916 | 0.571
+lr1e-4_t50k | - | 0.980 | 0.791
+lr1e-5_t150k | - | - | -
+lr1e-5_t400k | - | 0.894 | 0.399
+lr1e-5_t50k | - | - | -
+lr3e-5_t150k | 0.679 | 0.920 | 0.720
+lr3e-5_t400k | 0.580 | 0.817 | 0.501
+lr3e-5_t50k | - | - | -

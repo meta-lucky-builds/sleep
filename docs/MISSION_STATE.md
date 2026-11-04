@@ -17,7 +17,8 @@ Resume point for the coordinator. Update at every phase boundary.
 - [done] Independent review (`docs/REVIEW_1.md`); all CRITICAL and HIGH fixed; PREREG Amendment 1. CI: 398 passed.
 - GPU run: `scripts/gpu_run.sh` with tag `gpu-ready`; user rents and runs it, and uploads results.tar.gz.
 - [done] E0 on 4 models, E0b, E1 (one seed, 3 nights). See docs/results/. Selection abandoned; E1 kill rule fired; operating point not bracketed.
-- [next] E1b per PREREG Amendment 3. Then E3.
+- [done] E1b and partial E3x. See docs/results/E1b_E3x.md. Audit dropped; S_core losing; question-frame anchors promising, unproven at real learning.
+- [next] E5 per PREREG Amendment 5, once the user agrees to stop E3x.
 
 ## Blockers
 

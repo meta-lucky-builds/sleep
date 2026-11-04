@@ -183,6 +183,27 @@ E1b's numbers are exploratory, single-seed; these are prompts for E3x, not findi
 
 **A4.4 Budget tier.** E1b adds lr {1e-5, 3e-5} at 400k tokens per night, so 8 settings and 80 cells, because at 50k and 150k `S_core` gets far fewer training steps than `B3`, and could fail through undertraining alone. Query synthesis shares are set separately for these small budgets, in the E1b and E3x configs.
 
+## Amendment 5 (2026-11-04, after E1b and partial E3x; written before E5)
+
+Results in `docs/results/E1b_E3x.md`.
+
+**A5.1 Rulings.** The audit is dropped, with write gate, pressure and retirement (A3.7: held-out AUROC 0.58). A3.4's shared-setting rule is withdrawn: it picked a setting where KL arms don't learn. H11 to H13 were untestable; only H10 advances.
+
+**A5.2 E5: does protection survive learning?** Exploratory. Seeds 3001 to 3003, new, none used for tuning. 3 nights, same facts per night as E1. Settings: lr {1e-4, 3e-4} × tokens per night {500k, 1M}, as E1 suggests KL arms learn there. Arms:
+- `B0_frozen`, on the same questions, once per seed, to fix the baseline.
+- `B4q` at lr 1e-6, 50k: the near-zero control, to measure fragility on the same questions.
+- `B4_replay_kl`, `B4q`.
+- **`B4qd`** (new): `B4q` plus the true derived statements of `B3_derived`. An oracle-data upper bound on combining the two effects.
+- `S_coreq`, the best remaining form of the original design.
+
+**A5.3 Comparison rule.** Each arm is read at its own best setting: highest `ret_real` with `acq_direct` at least 0.7, on the mean over seeds. Compare `ret_real` relative to `B0_frozen`, and report the near-zero control next to it.
+
+**A5.4 H10, final exploratory test.** At their own best settings with `acq_direct` at least 0.7, `B4q` beats `B4_replay_kl` on `ret_real` by at least 10 points, CI over 3 seeds excluding zero. If `B4q` can't reach 0.7 at any setting, the protection is mostly from not learning, and H10 fails.
+
+**A5.5 H14 (composition).** `B4qd` scores at least 0.25 lift on `acq_twohop` and `acq_alias` with `ret_real` within 10 points of `B4q`. If it holds, the next step is having the model write these statements itself from pair contexts, which is the deployable form of REM.
+
+**A5.6 If H10 holds,** a confirmatory ten-night run on seeds 1001 to 1005, at a pre-stated setting, is justified. If not, the honest conclusion is that nothing tested beats the replay-plus-KL trade-off at this scale.
+
 ## Threats accepted
 
 Synthetic facts are not real experience; templated eval could be easier than real use. Results on 1 to 3B models may not transfer up or down (T2 §9). Ten nights is short of deployment timescales. The world generator was written by the same author as the method, so eval templates are fixed and reviewed before any arm runs.
