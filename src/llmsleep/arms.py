@@ -148,6 +148,7 @@ ARMS: dict[str, ArmConfig] = {
     "B4_replay_kl": replace(_B3, name="B4_replay_kl", self_sampled_kl=True),
     "B3_derived": replace(_B3, name="B3_derived", derived_hard=True),
     "B4q": _B4Q,
+    "B4qd": replace(_B4Q, name="B4qd", derived_hard=True),
     "B4q_idk": replace(_B4Q, name="B4q_idk", idk_negatives=True),
     "B4q_compact": replace(_B4Q, name="B4q_compact", compact=True),
     "B4q_r8": replace(_B4Q, name="B4q_r8", rank_override=8),

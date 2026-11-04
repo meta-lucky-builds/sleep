@@ -1,0 +1,56 @@
+name: toy
+
+# The smallest real test of E5: one seed, one night, a tiny world, on CPU. A check, not evidence. Tag toy-* starts it.
+on:
+  push:
+    tags: ["toy-*"]
+
+permissions:
+  contents: read
+
+jobs:
+  cell:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arm: B0_frozen, variant: learn}
+          - {arm: B4_replay_kl, variant: learn}
+          - {arm: B4q, variant: learn}
+          - {arm: B4qd, variant: learn}
+          - {arm: B4q, variant: near_zero}
+    env:
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      HF_HOME: ${{ github.workspace }}/.hf-cache
+      TOKENIZERS_PARALLELISM: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install CPU torch
+        run: pip install "torch>=2.3" --index-url https://download.pytorch.org/whl/cpu
+      - name: Install the package
+        run: pip install -e ".[capability]"
+      - uses: actions/cache@v4
+        with:
+          path: .hf-cache
+          key: hf-toy-v1
+      - name: Run the cell
+        run: |
+          set -o pipefail
+          mkdir -p runs/toy
+          python experiments/run.py --config configs/toy_e5.json --out runs/toy --device cpu \
+            --arms "${{ matrix.arm }}" --variants "${{ matrix.variant }}" 2>&1 | tee "runs/toy/log-${{ matrix.arm }}-${{ matrix.variant }}.txt"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: toy-${{ matrix.arm }}-${{ matrix.variant }}
+          path: |
+            runs/toy/**/results.jsonl
+            runs/toy/log-*.txt
+          if-no-files-found: warn
