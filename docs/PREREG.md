@@ -139,6 +139,8 @@ Observed: own-episode positives in the deployed test include generated questions
 
 **A2.4 Model.** H0's rule picks the smallest passing model: base 0.5B, unless 1.5B changes the reading. Instruct 0.5B's two-hop 0.20 vs. base 0.85 is unexplained; refusals under the chat template are a possible cause, unverified.
 
+**A2.4 addendum (2026-11-04, 1.5B results).** H1 also failed on both 1.5B models, so the kill rule holds at every size tested. Base 0.5B stays chosen; base 1.5B passes H0 at 0.92 to 1.00 and remains the scale check. Instruct failed H0 at both sizes.
+
 **A2.5 Readings.** H6 and H8 are measured on `S_core`. E1 runs with rollback disabled (`max_anchor_drift` at 1e9), because E1 exists to calibrate that limit from the drift distribution; `S_core` nights are all accepted there, and E1's numbers on rollback mean nothing. E1 uses `S_core`, not `S_full`. `CHD_mix` runs at k = 2 in E0b, since k = 4 exceeds the cost cap. `B0_frozen` and `B1_rag` run once per seed, since they train nothing.
 
 ## Threats accepted
