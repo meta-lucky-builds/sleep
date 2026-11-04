@@ -1,0 +1,681 @@
+
+=== Qwen/Qwen2.5-0.5B/lr1e-3_t1m ===
+S_core versus B3_pairs [exploratory] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  acq_direct: -0.007 CI[-0.073, +0.053] seeds=1
+  acq_reverse: -0.688 CI[-0.787, -0.575] seeds=1
+  acq_alias: +0.033 CI[-0.020, +0.087] seeds=1
+  acq_twohop: +0.000 CI[-0.037, +0.037] seeds=1
+  supersede: +0.000 CI[+0.000, +0.000] seeds=1
+  ret_real: +0.067 CI[+0.040, +0.093] seeds=1
+  stale: +0.000 CI[+0.000, +0.000] seeds=1
+  taught_value_bleed: +0.040 CI[-0.000, +0.087] seeds=1
+  false_recall_any_specific: +0.000 CI[+0.000, +0.000] seeds=1
+  drift_generic: -8.161 CI[-8.587, -7.738] seeds=1
+S_core versus B3_replay [exploratory] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_replay: seeds not marked confirmatory; B3_replay: selection counts fell back to fractions)
+  acq_direct: +0.047 CI[-0.027, +0.120] seeds=1
+  acq_reverse: -0.688 CI[-0.787, -0.575] seeds=1
+  acq_alias: +0.033 CI[-0.013, +0.087] seeds=1
+  acq_twohop: -0.025 CI[-0.113, +0.062] seeds=1
+  supersede: +0.000 CI[+0.000, +0.000] seeds=1
+  ret_real: +0.067 CI[+0.040, +0.093] seeds=1
+  stale: +0.000 CI[+0.000, +0.000] seeds=1
+  taught_value_bleed: -0.007 CI[-0.047, +0.040] seeds=1
+  false_recall_any_specific: +0.000 CI[+0.000, +0.000] seeds=1
+  drift_generic: -9.075 CI[-9.456, -8.687] seeds=1
+
+Validity (acceptance, unscored fraction, integrate count, budget spent)
+arm | seeds | acceptance | unscored | gate_rate | chains_per_night | integrate_per_night | spent_fraction | unspent_per_night | control_drop
+--- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_pairs | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 0.000 | 1.000 | 174.000 | -
+B3_replay | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 1.000 | 106.000 | -
+B4_replay_kl | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 1.000 | 304.000 | -
+S_core | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 123.667 | 0.995 | 4740.667 | -
+
+Anchor drift increase per night, nats per token (E1 sets max_anchor_drift from this)
+arm | nights | min | median | p90 | max
+--- | --- | --- | --- | --- | ---
+S_core | 3 | -0.086 | 0.109 | 0.477 | 0.477
+
+Hypotheses
+  H2_reverse: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_alias: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_twohop: not supported [exploratory] p_holm=1.000 diff=+0.000 CI[-0.037, +0.037] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  H3: withdrawn [exploratory] (A2.1: withdrawn unless E0b restores selection)
+  H4: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H5: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H6: missing [exploratory] p_holm=1.000 (only 1 seeds; 5 are needed; B3_replay: seeds not marked confirmatory; B3_replay: selection counts fell back to fractions; S_core: seeds not marked confirmatory)
+  H7: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H2: missing [exploratory] (all three H2 members must hold)
+  H8: not measured [exploratory] only 8 facts would have retired; 20 needed (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H9: not measured [exploratory] (needs a same-night conflict world)
+
+H8's log for S_core, per seed and night: gap vs. correctness, and change against the controls
+seed | night | taught | tonight | controls | auroc_probe | auroc_heldout | auroc_probe_before | within_fact_auroc | within_fact_auroc_heldout | gap_vs_correct_change | mean_gap_change | control_mean_gap_change | mean_correct_before | mean_correct_after | control_correct_before | control_correct_after | regression_slope | control_regression_slope | taught_net_of_control
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+7 | 0 | 49 | 49 | 40 | 0.674 | 0.286 | - | 0.478 | 0.286 | 0.002 | -2.703 | -2.542 | 0.000 | 0.939 | 0.000 | 0.025 | -0.996 | -1.050 | -0.166
+7 | 1 | 97 | 53 | 40 | 0.574 | 0.235 | 0.667 | 0.541 | - | -0.112 | -0.195 | 0.078 | 0.038 | 0.849 | 0.025 | 0.025 | -0.925 | -0.183 | -0.275
+7 | 2 | 150 | 59 | 40 | 0.634 | 0.714 | 0.579 | 0.668 | 0.667 | -0.184 | -0.201 | -0.193 | 0.034 | 0.814 | 0.025 | 0.100 | -0.968 | -0.468 | -0.054
+
+Arms at the final night (means over seeds)
+arm | seeds | acq_direct | acq_direct_lift | acq_reverse | acq_reverse_lift | acq_alias | acq_alias_lift | acq_twohop | acq_twohop_lift | acq_implied | supersede | stale | preservation | taught_value_bleed | false_recall_any_specific | false_recall_neighbour | ret_real | ret_real_head | ret_real_tail | drift_generic | delta_norm | delta_rank | style_length | style_artefact
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_pairs | 1 | 0.820 | 0.820 | 1.000 | 1.000 | 0.040 | 0.013 | 0.050 | -0.025 | 0.363 | 1.000 | 0.000 | 0.812 | 0.833 | 1.000 | 0.767 | 0.000 | 0.000 | 0.000 | 10.560 | 242.582 | 16128.000 | 5.346 | 0.000
+B3_replay | 1 | 0.767 | 0.767 | 1.000 | 1.000 | 0.020 | 0.013 | 0.000 | 0.000 | 0.340 | 1.000 | 0.000 | 0.783 | 0.880 | 1.000 | 0.793 | 0.000 | 0.000 | 0.000 | 11.474 | 244.560 | 16128.000 | 5.700 | 0.000
+B4_replay_kl | 1 | 0.527 | 0.527 | 1.000 | 1.000 | 0.060 | 0.053 | 0.000 | 0.000 | 0.353 | 1.000 | 0.000 | 0.551 | 0.580 | 1.000 | 0.507 | 0.003 | 0.000 | 0.007 | 6.346 | 128.350 | 16128.000 | 5.472 | 0.000
+S_core | 1 | 0.813 | 0.813 | 0.325 | 0.312 | 0.067 | 0.047 | 0.062 | -0.025 | 0.151 | 1.000 | 0.000 | 0.899 | 0.873 | 1.000 | 0.780 | 0.067 | 0.080 | 0.053 | 2.399 | 76.987 | 25885.000 | 7.846 | 0.000
+
+Direct accuracy by fact age, at the final night
+arm | age_0 | age_1 | age_2
+--- | --- | --- | ---
+B3_pairs | 0.889 | 0.788 | 0.820
+B3_replay | 0.778 | 0.769 | 0.820
+B4_replay_kl | 0.603 | 0.558 | 0.540
+S_core | 0.794 | 0.808 | 0.900
+
+Pilot checks: {'best_acq_implied': 0.3633333333333333, 'kill_no_arm_reaches_0.5_implied': True, 'B3_acq_direct': 0.7666666666666667, 'B3_reaches_0.7_direct': True}
+
+=== Qwen/Qwen2.5-0.5B/lr1e-3_t2m ===
+S_core versus B3_pairs [exploratory] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  acq_direct: +0.307 CI[+0.213, +0.393] seeds=1
+  acq_reverse: -0.788 CI[-0.875, -0.700] seeds=1
+  acq_alias: -0.033 CI[-0.080, +0.013] seeds=1
+  acq_twohop: -0.025 CI[-0.100, +0.050] seeds=1
+  supersede: +0.600 CI[+0.333, +0.867] seeds=1
+  ret_real: +0.000 CI[+0.000, +0.000] seeds=1
+  stale: +0.000 CI[+0.000, +0.000] seeds=1
+  taught_value_bleed: +0.407 CI[+0.327, +0.487] seeds=1
+  false_recall_any_specific: +0.000 CI[+0.000, +0.000] seeds=1
+  drift_generic: -9.280 CI[-9.687, -8.914] seeds=1
+S_core versus B3_replay [exploratory] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_replay: seeds not marked confirmatory; B3_replay: selection counts fell back to fractions)
+  acq_direct: +0.173 CI[+0.093, +0.253] seeds=1
+  acq_reverse: -0.700 CI[-0.813, -0.575] seeds=1
+  acq_alias: -0.007 CI[-0.047, +0.033] seeds=1
+  acq_twohop: +0.012 CI[-0.050, +0.075] seeds=1
+  supersede: +0.133 CI[+0.000, +0.333] seeds=1
+  ret_real: +0.000 CI[+0.000, +0.000] seeds=1
+  stale: +0.000 CI[+0.000, +0.000] seeds=1
+  taught_value_bleed: +0.247 CI[+0.180, +0.313] seeds=1
+  false_recall_any_specific: +0.000 CI[+0.000, +0.000] seeds=1
+  drift_generic: -10.305 CI[-10.768, -9.902] seeds=1
+
+Validity (acceptance, unscored fraction, integrate count, budget spent)
+arm | seeds | acceptance | unscored | gate_rate | chains_per_night | integrate_per_night | spent_fraction | unspent_per_night | control_drop
+--- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_pairs | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 0.000 | 1.000 | 315.333 | -
+B3_replay | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 1.000 | 230.000 | -
+B4_replay_kl | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 1.000 | 459.667 | -
+S_core | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 114.667 | 0.998 | 4750.667 | -
+
+Anchor drift increase per night, nats per token (E1 sets max_anchor_drift from this)
+arm | nights | min | median | p90 | max
+--- | --- | --- | --- | --- | ---
+S_core | 3 | 0.121 | 0.595 | 0.621 | 0.621
+
+Hypotheses
+  H2_reverse: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_alias: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_twohop: not supported [exploratory] p_holm=1.000 diff=-0.025 CI[-0.100, +0.050] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  H3: withdrawn [exploratory] (A2.1: withdrawn unless E0b restores selection)
+  H4: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H5: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H6: missing [exploratory] p_holm=1.000 (only 1 seeds; 5 are needed; B3_replay: seeds not marked confirmatory; B3_replay: selection counts fell back to fractions; S_core: seeds not marked confirmatory)
+  H7: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H2: missing [exploratory] (all three H2 members must hold)
+  H8: not measured [exploratory] only 16 facts would have retired; 20 needed (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H9: not measured [exploratory] (needs a same-night conflict world)
+
+H8's log for S_core, per seed and night: gap vs. correctness, and change against the controls
+seed | night | taught | tonight | controls | auroc_probe | auroc_heldout | auroc_probe_before | within_fact_auroc | within_fact_auroc_heldout | gap_vs_correct_change | mean_gap_change | control_mean_gap_change | mean_correct_before | mean_correct_after | control_correct_before | control_correct_after | regression_slope | control_regression_slope | taught_net_of_control
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+7 | 0 | 49 | 49 | 40 | 0.632 | 0.192 | - | 0.605 | 0.231 | -0.113 | -2.711 | -2.487 | 0.000 | 0.898 | 0.000 | 0.025 | -0.994 | -1.015 | -0.229
+7 | 1 | 97 | 53 | 40 | 0.797 | 0.545 | 0.547 | 0.651 | - | -0.174 | -0.142 | -0.064 | 0.057 | 0.698 | 0.025 | 0.025 | -0.794 | -0.848 | -0.099
+7 | 2 | 150 | 59 | 40 | 0.845 | 0.705 | 0.439 | 0.769 | - | -0.343 | 0.026 | 0.068 | 0.034 | 0.780 | 0.025 | 0.075 | -0.692 | -0.255 | -0.036
+
+Arms at the final night (means over seeds)
+arm | seeds | acq_direct | acq_direct_lift | acq_reverse | acq_reverse_lift | acq_alias | acq_alias_lift | acq_twohop | acq_twohop_lift | acq_implied | supersede | stale | preservation | taught_value_bleed | false_recall_any_specific | false_recall_neighbour | ret_real | ret_real_head | ret_real_tail | drift_generic | delta_norm | delta_rank | style_length | style_artefact
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_pairs | 1 | 0.460 | 0.460 | 0.988 | 0.988 | 0.027 | 0.007 | 0.000 | 0.000 | 0.338 | 0.400 | 0.000 | 0.536 | 0.500 | 1.000 | 0.467 | 0.000 | 0.000 | 0.000 | 13.129 | 466.460 | 16128.000 | 5.796 | 0.000
+B3_replay | 1 | 0.593 | 0.593 | 0.900 | 0.900 | 0.000 | -0.020 | 0.000 | -0.037 | 0.300 | 0.867 | 0.000 | 0.623 | 0.660 | 1.000 | 0.600 | 0.000 | 0.000 | 0.000 | 14.154 | 457.302 | 16128.000 | 5.763 | 0.000
+B4_replay_kl | 1 | 0.987 | 0.987 | 1.000 | 1.000 | 0.113 | 0.080 | 0.062 | -0.025 | 0.392 | 1.000 | 0.000 | 1.000 | 0.987 | 1.000 | 0.900 | 0.137 | 0.180 | 0.093 | 1.739 | 141.557 | 16128.000 | 5.057 | 0.000
+S_core | 1 | 0.767 | 0.767 | 0.200 | 0.200 | 0.013 | -0.027 | 0.050 | -0.025 | 0.088 | 1.000 | 0.000 | 0.783 | 0.907 | 1.000 | 0.827 | 0.000 | 0.000 | 0.000 | 3.849 | 164.709 | 22682.000 | 7.137 | 0.000
+
+Direct accuracy by fact age, at the final night
+arm | age_0 | age_1 | age_2
+--- | --- | --- | ---
+B3_pairs | 0.556 | 0.423 | 0.360
+B3_replay | 0.698 | 0.500 | 0.640
+B4_replay_kl | 0.984 | 0.981 | 1.000
+S_core | 0.762 | 0.769 | 0.840
+
+Pilot checks: {'best_acq_implied': 0.39194444444444443, 'kill_no_arm_reaches_0.5_implied': True, 'B3_acq_direct': 0.5933333333333334, 'B3_reaches_0.7_direct': False}
+
+=== Qwen/Qwen2.5-0.5B/lr1e-3_t500k ===
+S_core versus B3_pairs [exploratory] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  acq_direct: -0.420 CI[-0.500, -0.340] seeds=1
+  acq_reverse: -0.262 CI[-0.363, -0.162] seeds=1
+  acq_alias: -0.040 CI[-0.100, +0.020] seeds=1
+  acq_twohop: +0.000 CI[+0.000, +0.000] seeds=1
+  supersede: -0.467 CI[-0.733, -0.200] seeds=1
+  ret_real: +0.000 CI[+0.000, +0.000] seeds=1
+  stale: +0.000 CI[+0.000, +0.000] seeds=1
+  taught_value_bleed: -0.433 CI[-0.513, -0.353] seeds=1
+  false_recall_any_specific: +0.000 CI[+0.000, +0.000] seeds=1
+  drift_generic: -2.429 CI[-2.729, -2.153] seeds=1
+S_core versus B3_replay [exploratory] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_replay: seeds not marked confirmatory; B3_replay: selection counts fell back to fractions)
+  acq_direct: -0.360 CI[-0.440, -0.280] seeds=1
+  acq_reverse: -0.262 CI[-0.363, -0.162] seeds=1
+  acq_alias: -0.047 CI[-0.100, +0.007] seeds=1
+  acq_twohop: +0.000 CI[+0.000, +0.000] seeds=1
+  supersede: -0.467 CI[-0.733, -0.200] seeds=1
+  ret_real: +0.000 CI[+0.000, +0.000] seeds=1
+  stale: +0.000 CI[+0.000, +0.000] seeds=1
+  taught_value_bleed: -0.353 CI[-0.433, -0.280] seeds=1
+  false_recall_any_specific: +0.000 CI[+0.000, +0.000] seeds=1
+  drift_generic: -4.025 CI[-4.272, -3.771] seeds=1
+
+Validity (acceptance, unscored fraction, integrate count, budget spent)
+arm | seeds | acceptance | unscored | gate_rate | chains_per_night | integrate_per_night | spent_fraction | unspent_per_night | control_drop
+--- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_pairs | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 0.000 | 1.000 | 243.333 | -
+B3_replay | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 1.000 | 202.000 | -
+B4_replay_kl | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.999 | 475.000 | -
+S_core | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 98.333 | 0.993 | 3325.333 | -
+
+Anchor drift increase per night, nats per token (E1 sets max_anchor_drift from this)
+arm | nights | min | median | p90 | max
+--- | --- | --- | --- | --- | ---
+S_core | 3 | -0.400 | 1.025 | 1.993 | 1.993
+
+Hypotheses
+  H2_reverse: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_alias: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_twohop: not supported [exploratory] p_holm=1.000 diff=+0.000 CI[+0.000, +0.000] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  H3: withdrawn [exploratory] (A2.1: withdrawn unless E0b restores selection)
+  H4: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H5: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H6: missing [exploratory] p_holm=1.000 (only 1 seeds; 5 are needed; B3_replay: seeds not marked confirmatory; B3_replay: selection counts fell back to fractions; S_core: seeds not marked confirmatory)
+  H7: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H2: missing [exploratory] (all three H2 members must hold)
+  H8: not measured [exploratory] only 7 facts would have retired; 20 needed (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H9: not measured [exploratory] (needs a same-night conflict world)
+
+H8's log for S_core, per seed and night: gap vs. correctness, and change against the controls
+seed | night | taught | tonight | controls | auroc_probe | auroc_heldout | auroc_probe_before | within_fact_auroc | within_fact_auroc_heldout | gap_vs_correct_change | mean_gap_change | control_mean_gap_change | mean_correct_before | mean_correct_after | control_correct_before | control_correct_after | regression_slope | control_regression_slope | taught_net_of_control
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+7 | 0 | 49 | 49 | 40 | 0.282 | 0.231 | - | 0.777 | 0.692 | -0.277 | -2.757 | -2.783 | 0.000 | 0.102 | 0.000 | 0.000 | -0.997 | -1.001 | 0.020
+7 | 1 | 97 | 53 | 40 | 0.560 | 0.622 | - | 0.564 | - | 0.020 | -0.016 | 0.029 | 0.000 | 0.472 | 0.000 | 0.025 | -0.985 | -1.098 | -0.085
+7 | 2 | 150 | 59 | 40 | 0.537 | 0.450 | 0.431 | 0.603 | - | -0.124 | 0.005 | 0.015 | 0.017 | 0.508 | 0.025 | 0.125 | -0.912 | -0.826 | -0.028
+
+Arms at the final night (means over seeds)
+arm | seeds | acq_direct | acq_direct_lift | acq_reverse | acq_reverse_lift | acq_alias | acq_alias_lift | acq_twohop | acq_twohop_lift | acq_implied | supersede | stale | preservation | taught_value_bleed | false_recall_any_specific | false_recall_neighbour | ret_real | ret_real_head | ret_real_tail | drift_generic | delta_norm | delta_rank | style_length | style_artefact
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_pairs | 1 | 0.967 | 0.967 | 1.000 | 1.000 | 0.047 | 0.027 | 0.000 | 0.000 | 0.349 | 1.000 | 0.000 | 0.957 | 0.973 | 1.000 | 0.907 | 0.000 | 0.000 | 0.000 | 7.466 | 148.088 | 16128.000 | 5.315 | 0.000
+B3_replay | 1 | 0.907 | 0.907 | 1.000 | 1.000 | 0.060 | 0.033 | 0.000 | 0.000 | 0.353 | 1.000 | 0.000 | 0.913 | 0.893 | 1.000 | 0.820 | 0.000 | 0.000 | 0.000 | 9.062 | 152.025 | 16128.000 | 5.454 | 0.000
+B4_replay_kl | 1 | 1.000 | 1.000 | 1.000 | 1.000 | 0.067 | -0.013 | 0.062 | -0.025 | 0.376 | 1.000 | 0.000 | 1.000 | 1.000 | 1.000 | 0.907 | 0.173 | 0.233 | 0.113 | 2.823 | 74.133 | 16128.000 | 5.111 | 0.000
+S_core | 1 | 0.547 | 0.547 | 0.750 | 0.738 | 0.027 | -0.013 | 0.000 | 0.000 | 0.259 | 0.533 | 0.000 | 0.623 | 0.540 | 1.000 | 0.473 | 0.000 | 0.000 | 0.000 | 5.037 | 89.343 | 17933.000 | 5.559 | 0.000
+
+Direct accuracy by fact age, at the final night
+arm | age_0 | age_1 | age_2
+--- | --- | --- | ---
+B3_pairs | 0.984 | 0.923 | 1.000
+B3_replay | 0.968 | 0.865 | 0.900
+B4_replay_kl | 1.000 | 1.000 | 1.000
+S_core | 0.556 | 0.462 | 0.620
+
+Pilot checks: {'best_acq_implied': 0.37638888888888883, 'kill_no_arm_reaches_0.5_implied': True, 'B3_acq_direct': 0.9066666666666666, 'B3_reaches_0.7_direct': True}
+
+=== Qwen/Qwen2.5-0.5B/lr1e-4_t1m ===
+S_core versus B3_pairs [exploratory] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  acq_direct: -0.147 CI[-0.207, -0.087] seeds=1
+  acq_reverse: -0.375 CI[-0.488, -0.262] seeds=1
+  acq_alias: +0.060 CI[-0.020, +0.147] seeds=1
+  acq_twohop: +0.050 CI[-0.013, +0.125] seeds=1
+  supersede: -0.133 CI[-0.333, +0.000] seeds=1
+  ret_real: +0.410 CI[+0.350, +0.470] seeds=1
+  stale: +0.000 CI[+0.000, +0.000] seeds=1
+  taught_value_bleed: -0.033 CI[-0.080, +0.007] seeds=1
+  false_recall_any_specific: +0.000 CI[+0.000, +0.000] seeds=1
+  drift_generic: -1.993 CI[-2.177, -1.812] seeds=1
+S_core versus B3_replay [exploratory] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_replay: seeds not marked confirmatory; B3_replay: selection counts fell back to fractions)
+  acq_direct: -0.140 CI[-0.200, -0.080] seeds=1
+  acq_reverse: -0.387 CI[-0.488, -0.287] seeds=1
+  acq_alias: +0.047 CI[-0.033, +0.127] seeds=1
+  acq_twohop: +0.062 CI[-0.013, +0.138] seeds=1
+  supersede: -0.133 CI[-0.333, +0.000] seeds=1
+  ret_real: +0.463 CI[+0.403, +0.523] seeds=1
+  stale: +0.000 CI[+0.000, +0.000] seeds=1
+  taught_value_bleed: -0.040 CI[-0.087, +0.000] seeds=1
+  false_recall_any_specific: +0.000 CI[+0.000, +0.000] seeds=1
+  drift_generic: -2.629 CI[-2.886, -2.390] seeds=1
+
+Validity (acceptance, unscored fraction, integrate count, budget spent)
+arm | seeds | acceptance | unscored | gate_rate | chains_per_night | integrate_per_night | spent_fraction | unspent_per_night | control_drop
+--- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_pairs | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 0.000 | 1.000 | 174.000 | -
+B3_replay | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 1.000 | 106.000 | -
+B4_replay_kl | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 1.000 | 304.000 | -
+S_core | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 306.667 | 0.995 | 5182.333 | -
+
+Anchor drift increase per night, nats per token (E1 sets max_anchor_drift from this)
+arm | nights | min | median | p90 | max
+--- | --- | --- | --- | --- | ---
+S_core | 3 | -0.108 | 0.067 | 0.155 | 0.155
+
+Hypotheses
+  H2_reverse: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_alias: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_twohop: not supported [exploratory] p_holm=1.000 diff=+0.050 CI[-0.013, +0.125] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  H3: withdrawn [exploratory] (A2.1: withdrawn unless E0b restores selection)
+  H4: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H5: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H6: missing [exploratory] p_holm=1.000 (only 1 seeds; 5 are needed; B3_replay: seeds not marked confirmatory; B3_replay: selection counts fell back to fractions; S_core: seeds not marked confirmatory)
+  H7: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H2: missing [exploratory] (all three H2 members must hold)
+  H8: not measured [exploratory] only 4 facts would have retired; 20 needed (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H9: not measured [exploratory] (needs a same-night conflict world)
+
+H8's log for S_core, per seed and night: gap vs. correctness, and change against the controls
+seed | night | taught | tonight | controls | auroc_probe | auroc_heldout | auroc_probe_before | within_fact_auroc | within_fact_auroc_heldout | gap_vs_correct_change | mean_gap_change | control_mean_gap_change | mean_correct_before | mean_correct_after | control_correct_before | control_correct_after | regression_slope | control_regression_slope | taught_net_of_control
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+7 | 0 | 49 | 49 | 40 | 0.812 | 0.071 | - | 0.616 | 0.214 | -0.104 | -2.592 | -1.542 | 0.000 | 0.939 | 0.000 | 0.050 | -0.994 | -0.925 | -1.055
+7 | 1 | 97 | 53 | 40 | 0.823 | 0.531 | 1.000 | 0.646 | 0.618 | -0.122 | -1.204 | -0.338 | 0.019 | 0.830 | 0.050 | 0.100 | -0.823 | -0.750 | -0.447
+7 | 2 | 150 | 59 | 40 | 0.860 | 0.629 | 0.833 | 0.478 | 0.667 | -0.000 | -0.864 | -0.042 | 0.034 | 0.763 | 0.100 | 0.100 | -0.735 | -0.456 | -0.553
+
+Arms at the final night (means over seeds)
+arm | seeds | acq_direct | acq_direct_lift | acq_reverse | acq_reverse_lift | acq_alias | acq_alias_lift | acq_twohop | acq_twohop_lift | acq_implied | supersede | stale | preservation | taught_value_bleed | false_recall_any_specific | false_recall_neighbour | ret_real | ret_real_head | ret_real_tail | drift_generic | delta_norm | delta_rank | style_length | style_artefact
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_pairs | 1 | 0.987 | 0.987 | 0.988 | 0.988 | 0.080 | 0.007 | 0.062 | 0.000 | 0.377 | 1.000 | 0.000 | 1.000 | 0.980 | 1.000 | 0.773 | 0.110 | 0.180 | 0.040 | 2.413 | 11.786 | 16128.000 | 5.083 | 0.000
+B3_replay | 1 | 0.980 | 0.980 | 1.000 | 1.000 | 0.087 | 0.020 | 0.013 | -0.013 | 0.366 | 1.000 | 0.000 | 1.000 | 0.987 | 1.000 | 0.847 | 0.057 | 0.093 | 0.020 | 3.050 | 11.576 | 16128.000 | 5.159 | 0.000
+B4_replay_kl | 1 | 0.980 | 0.980 | 1.000 | 1.000 | 0.107 | 0.087 | 0.025 | -0.050 | 0.377 | 1.000 | 0.000 | 1.000 | 0.987 | 1.000 | 0.773 | 0.457 | 0.600 | 0.313 | 0.019 | 8.695 | 16128.000 | 5.209 | 0.000
+S_core | 1 | 0.840 | 0.840 | 0.613 | 0.613 | 0.073 | 0.067 | 0.100 | 0.050 | 0.262 | 0.867 | 0.000 | 0.812 | 0.947 | 1.000 | 0.720 | 0.520 | 0.647 | 0.393 | 0.421 | 8.361 | 25227.000 | 6.443 | 0.000
+
+Direct accuracy by fact age, at the final night
+arm | age_0 | age_1 | age_2
+--- | --- | --- | ---
+B3_pairs | 0.968 | 1.000 | 1.000
+B3_replay | 0.968 | 0.981 | 1.000
+B4_replay_kl | 0.984 | 0.962 | 1.000
+S_core | 0.794 | 0.827 | 0.920
+
+Pilot checks: {'best_acq_implied': 0.37722222222222224, 'kill_no_arm_reaches_0.5_implied': True, 'B3_acq_direct': 0.98, 'B3_reaches_0.7_direct': True}
+
+=== Qwen/Qwen2.5-0.5B/lr1e-4_t2m ===
+S_core versus B3_pairs [exploratory] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  acq_direct: -0.220 CI[-0.293, -0.153] seeds=1
+  acq_reverse: -0.363 CI[-0.475, -0.262] seeds=1
+  acq_alias: +0.080 CI[+0.000, +0.153] seeds=1
+  acq_twohop: +0.000 CI[-0.050, +0.050] seeds=1
+  supersede: -0.133 CI[-0.333, +0.000] seeds=1
+  ret_real: +0.340 CI[+0.283, +0.393] seeds=1
+  stale: +0.067 CI[+0.000, +0.200] seeds=1
+  taught_value_bleed: -0.093 CI[-0.147, -0.047] seeds=1
+  false_recall_any_specific: +0.000 CI[+0.000, +0.000] seeds=1
+  drift_generic: -2.736 CI[-2.994, -2.495] seeds=1
+S_core versus B3_replay [exploratory] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_replay: seeds not marked confirmatory; B3_replay: selection counts fell back to fractions)
+  acq_direct: -0.220 CI[-0.293, -0.153] seeds=1
+  acq_reverse: -0.363 CI[-0.475, -0.262] seeds=1
+  acq_alias: +0.020 CI[-0.047, +0.093] seeds=1
+  acq_twohop: +0.025 CI[-0.013, +0.075] seeds=1
+  supersede: -0.133 CI[-0.333, +0.000] seeds=1
+  ret_real: +0.337 CI[+0.280, +0.397] seeds=1
+  stale: +0.067 CI[+0.000, +0.200] seeds=1
+  taught_value_bleed: -0.087 CI[-0.140, -0.040] seeds=1
+  false_recall_any_specific: +0.000 CI[+0.000, +0.000] seeds=1
+  drift_generic: -3.100 CI[-3.380, -2.825] seeds=1
+
+Validity (acceptance, unscored fraction, integrate count, budget spent)
+arm | seeds | acceptance | unscored | gate_rate | chains_per_night | integrate_per_night | spent_fraction | unspent_per_night | control_drop
+--- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_pairs | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 0.000 | 1.000 | 315.333 | -
+B3_replay | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 1.000 | 230.000 | -
+B4_replay_kl | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 1.000 | 459.667 | -
+S_core | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 306.333 | 0.998 | 4774.667 | -
+
+Anchor drift increase per night, nats per token (E1 sets max_anchor_drift from this)
+arm | nights | min | median | p90 | max
+--- | --- | --- | --- | --- | ---
+S_core | 3 | -0.164 | 0.026 | 0.169 | 0.169
+
+Hypotheses
+  H2_reverse: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_alias: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_twohop: not supported [exploratory] p_holm=1.000 diff=+0.000 CI[-0.050, +0.050] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  H3: withdrawn [exploratory] (A2.1: withdrawn unless E0b restores selection)
+  H4: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H5: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H6: missing [exploratory] p_holm=1.000 (only 1 seeds; 5 are needed; B3_replay: seeds not marked confirmatory; B3_replay: selection counts fell back to fractions; S_core: seeds not marked confirmatory)
+  H7: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H2: missing [exploratory] (all three H2 members must hold)
+  H8: not measured [exploratory] only 7 facts would have retired; 20 needed (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H9: not measured [exploratory] (needs a same-night conflict world)
+
+H8's log for S_core, per seed and night: gap vs. correctness, and change against the controls
+seed | night | taught | tonight | controls | auroc_probe | auroc_heldout | auroc_probe_before | within_fact_auroc | within_fact_auroc_heldout | gap_vs_correct_change | mean_gap_change | control_mean_gap_change | mean_correct_before | mean_correct_after | control_correct_before | control_correct_after | regression_slope | control_regression_slope | taught_net_of_control
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+7 | 0 | 49 | 49 | 40 | 0.543 | 0.429 | - | 0.543 | 0.286 | -0.088 | -2.560 | -1.588 | 0.000 | 0.939 | 0.000 | 0.050 | -1.000 | -0.874 | -0.977
+7 | 1 | 97 | 53 | 40 | 0.774 | 0.671 | - | 0.428 | 0.343 | 0.121 | -1.127 | -0.296 | 0.000 | 0.811 | 0.050 | 0.075 | -0.766 | -0.763 | -0.421
+7 | 2 | 150 | 59 | 40 | 0.824 | 0.755 | 1.000 | 0.422 | 0.306 | 0.163 | -0.976 | -0.194 | 0.017 | 0.712 | 0.075 | 0.125 | -0.692 | -0.497 | -0.447
+
+Arms at the final night (means over seeds)
+arm | seeds | acq_direct | acq_direct_lift | acq_reverse | acq_reverse_lift | acq_alias | acq_alias_lift | acq_twohop | acq_twohop_lift | acq_implied | supersede | stale | preservation | taught_value_bleed | false_recall_any_specific | false_recall_neighbour | ret_real | ret_real_head | ret_real_tail | drift_generic | delta_norm | delta_rank | style_length | style_artefact
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_pairs | 1 | 0.987 | 0.987 | 1.000 | 1.000 | 0.060 | -0.020 | 0.050 | 0.000 | 0.370 | 1.000 | 0.000 | 1.000 | 1.000 | 1.000 | 0.833 | 0.077 | 0.127 | 0.027 | 3.221 | 15.319 | 16128.000 | 5.070 | 0.000
+B3_replay | 1 | 0.987 | 0.987 | 1.000 | 1.000 | 0.093 | 0.040 | 0.062 | -0.025 | 0.385 | 1.000 | 0.000 | 1.000 | 0.993 | 1.000 | 0.860 | 0.080 | 0.133 | 0.027 | 3.585 | 14.951 | 16128.000 | 5.100 | 0.000
+B4_replay_kl | 1 | 0.973 | 0.973 | 0.988 | 0.988 | 0.087 | 0.040 | 0.025 | -0.062 | 0.366 | 1.000 | 0.000 | 1.000 | 0.993 | 1.000 | 0.773 | 0.490 | 0.627 | 0.353 | 0.017 | 11.011 | 16128.000 | 5.300 | 0.000
+S_core | 1 | 0.773 | 0.767 | 0.637 | 0.637 | 0.100 | 0.060 | 0.075 | 0.000 | 0.271 | 0.867 | 0.067 | 0.725 | 0.907 | 1.000 | 0.687 | 0.417 | 0.527 | 0.307 | 0.485 | 11.060 | 24166.000 | 6.454 | 0.000
+
+Direct accuracy by fact age, at the final night
+arm | age_0 | age_1 | age_2
+--- | --- | --- | ---
+B3_pairs | 0.968 | 1.000 | 1.000
+B3_replay | 0.984 | 0.981 | 1.000
+B4_replay_kl | 0.968 | 0.962 | 1.000
+S_core | 0.746 | 0.750 | 0.860
+
+Pilot checks: {'best_acq_implied': 0.3852777777777778, 'kill_no_arm_reaches_0.5_implied': True, 'B3_acq_direct': 0.9866666666666667, 'B3_reaches_0.7_direct': True}
+
+=== Qwen/Qwen2.5-0.5B/lr1e-4_t500k ===
+S_core versus B3_pairs [exploratory] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  acq_direct: -0.213 CI[-0.287, -0.140] seeds=1
+  acq_reverse: -0.412 CI[-0.525, -0.300] seeds=1
+  acq_alias: -0.013 CI[-0.087, +0.060] seeds=1
+  acq_twohop: +0.013 CI[-0.062, +0.087] seeds=1
+  supersede: -0.067 CI[-0.200, +0.000] seeds=1
+  ret_real: +0.403 CI[+0.340, +0.467] seeds=1
+  stale: +0.000 CI[+0.000, +0.000] seeds=1
+  taught_value_bleed: -0.027 CI[-0.080, +0.020] seeds=1
+  false_recall_any_specific: +0.000 CI[+0.000, +0.000] seeds=1
+  drift_generic: -1.944 CI[-2.181, -1.734] seeds=1
+S_core versus B3_replay [exploratory] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_replay: seeds not marked confirmatory; B3_replay: selection counts fell back to fractions)
+  acq_direct: -0.213 CI[-0.287, -0.140] seeds=1
+  acq_reverse: -0.438 CI[-0.550, -0.325] seeds=1
+  acq_alias: +0.020 CI[-0.060, +0.100] seeds=1
+  acq_twohop: +0.000 CI[-0.075, +0.075] seeds=1
+  supersede: -0.067 CI[-0.200, +0.000] seeds=1
+  ret_real: +0.450 CI[+0.390, +0.510] seeds=1
+  stale: +0.000 CI[+0.000, +0.000] seeds=1
+  taught_value_bleed: -0.073 CI[-0.120, -0.033] seeds=1
+  false_recall_any_specific: +0.000 CI[+0.000, +0.000] seeds=1
+  drift_generic: -2.096 CI[-2.298, -1.910] seeds=1
+
+Validity (acceptance, unscored fraction, integrate count, budget spent)
+arm | seeds | acceptance | unscored | gate_rate | chains_per_night | integrate_per_night | spent_fraction | unspent_per_night | control_drop
+--- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B0_frozen | 1 | - | - | - | - | - | 0.000 | 500000.000 | -
+B1_rag | 1 | - | - | - | - | - | 0.000 | 500000.000 | -
+B3_pairs | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 0.000 | 1.000 | 243.333 | -
+B3_replay | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 1.000 | 202.000 | -
+B4_replay_kl | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.999 | 475.000 | -
+S_core | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 322.000 | 0.991 | 4363.333 | -
+
+Anchor drift increase per night, nats per token (E1 sets max_anchor_drift from this)
+arm | nights | min | median | p90 | max
+--- | --- | --- | --- | --- | ---
+S_core | 3 | -0.088 | 0.007 | 0.171 | 0.171
+
+Hypotheses
+  H2_reverse: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_alias: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_twohop: not supported [exploratory] p_holm=1.000 diff=+0.013 CI[-0.062, +0.087] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  H3: withdrawn [exploratory] (A2.1: withdrawn unless E0b restores selection)
+  H4: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H5: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H6: missing [exploratory] p_holm=1.000 (only 1 seeds; 5 are needed; B3_replay: seeds not marked confirmatory; B3_replay: selection counts fell back to fractions; S_core: seeds not marked confirmatory)
+  H7: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H2: missing [exploratory] (all three H2 members must hold)
+  H8: not measured [exploratory] only 2 facts would have retired; 20 needed (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H9: not measured [exploratory] (needs a same-night conflict world)
+
+H8's log for S_core, per seed and night: gap vs. correctness, and change against the controls
+seed | night | taught | tonight | controls | auroc_probe | auroc_heldout | auroc_probe_before | within_fact_auroc | within_fact_auroc_heldout | gap_vs_correct_change | mean_gap_change | control_mean_gap_change | mean_correct_before | mean_correct_after | control_correct_before | control_correct_after | regression_slope | control_regression_slope | taught_net_of_control
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+7 | 0 | 49 | 49 | 40 | 0.818 | 0.640 | - | 0.644 | 0.320 | -0.244 | -2.400 | -1.393 | 0.000 | 0.776 | 0.000 | 0.125 | -1.020 | -0.818 | -1.011
+7 | 1 | 97 | 53 | 40 | 0.742 | 0.517 | 0.853 | 0.304 | 0.371 | 0.330 | -1.077 | -0.414 | 0.038 | 0.698 | 0.125 | 0.075 | -0.675 | -0.619 | -0.423
+7 | 2 | 150 | 59 | 40 | 0.836 | 0.673 | 0.828 | 0.363 | 0.360 | 0.227 | -1.200 | -0.205 | 0.017 | 0.746 | 0.075 | 0.050 | -0.736 | -0.564 | -0.608
+
+Arms at the final night (means over seeds)
+arm | seeds | acq_direct | acq_direct_lift | acq_reverse | acq_reverse_lift | acq_alias | acq_alias_lift | acq_twohop | acq_twohop_lift | acq_implied | supersede | stale | preservation | taught_value_bleed | false_recall_any_specific | false_recall_neighbour | ret_real | ret_real_head | ret_real_tail | drift_generic | delta_norm | delta_rank | style_length | style_artefact
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B0_frozen | 1 | 0.000 | 0.000 | 0.000 | 0.000 | 0.007 | 0.007 | 0.000 | 0.000 | 0.002 | 0.000 | 0.000 | 0.000 | 0.167 | 1.000 | 0.000 | 0.997 | 1.000 | 0.993 | 0.000 | 0.000 | 0.000 | 19.598 | 0.000
+B1_rag | 1 | 0.967 | 0.967 | 0.925 | 0.925 | 0.993 | 0.993 | 0.863 | 0.863 | 0.927 | 1.000 | 0.000 | 0.928 | 0.167 | 1.000 | 0.000 | 0.997 | 1.000 | 0.993 | 0.000 | 0.000 | 0.000 | 5.109 | 0.000
+B3_pairs | 1 | 0.973 | 0.973 | 0.975 | 0.975 | 0.073 | 0.047 | 0.087 | -0.013 | 0.379 | 1.000 | 0.000 | 0.957 | 0.953 | 1.000 | 0.780 | 0.123 | 0.173 | 0.073 | 2.303 | 10.911 | 16128.000 | 5.191 | 0.000
+B3_replay | 1 | 0.973 | 0.973 | 1.000 | 1.000 | 0.080 | 0.013 | 0.000 | 0.000 | 0.360 | 1.000 | 0.000 | 1.000 | 1.000 | 1.000 | 0.800 | 0.077 | 0.120 | 0.033 | 2.454 | 9.188 | 16128.000 | 5.143 | 0.000
+B4_replay_kl | 1 | 0.960 | 0.960 | 0.950 | 0.950 | 0.087 | 0.047 | 0.050 | -0.037 | 0.362 | 1.000 | 0.000 | 1.000 | 0.987 | 1.000 | 0.733 | 0.460 | 0.620 | 0.300 | 0.026 | 6.943 | 16128.000 | 5.196 | 0.000
+S_core | 1 | 0.760 | 0.760 | 0.575 | 0.562 | 0.073 | 0.033 | 0.062 | 0.000 | 0.237 | 0.933 | 0.000 | 0.739 | 0.927 | 1.000 | 0.560 | 0.527 | 0.707 | 0.347 | 0.358 | 6.008 | 26368.000 | 6.174 | 0.000
+
+Direct accuracy by fact age, at the final night
+arm | age_0 | age_1 | age_2
+--- | --- | --- | ---
+B0_frozen | 0.000 | 0.000 | 0.000
+B1_rag | 0.984 | 0.962 | 0.960
+B3_pairs | 0.952 | 0.981 | 1.000
+B3_replay | 0.952 | 0.981 | 1.000
+B4_replay_kl | 0.984 | 0.923 | 0.980
+S_core | 0.762 | 0.750 | 0.820
+
+Pilot checks: {'best_acq_implied': 0.9269444444444445, 'kill_no_arm_reaches_0.5_implied': False, 'B3_acq_direct': 0.9733333333333334, 'B3_reaches_0.7_direct': True}
+
+=== Qwen/Qwen2.5-0.5B/lr3e-4_t1m ===
+S_core versus B3_pairs [exploratory] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  acq_direct: +0.660 CI[+0.580, +0.740] seeds=1
+  acq_reverse: -0.375 CI[-0.488, -0.262] seeds=1
+  acq_alias: +0.047 CI[-0.013, +0.107] seeds=1
+  acq_twohop: -0.013 CI[-0.113, +0.075] seeds=1
+  supersede: +0.600 CI[+0.267, +0.867] seeds=1
+  ret_real: +0.403 CI[+0.350, +0.460] seeds=1
+  stale: +0.067 CI[+0.000, +0.200] seeds=1
+  taught_value_bleed: +0.713 CI[+0.627, +0.793] seeds=1
+  false_recall_any_specific: +0.000 CI[+0.000, +0.000] seeds=1
+  drift_generic: -8.236 CI[-8.481, -8.004] seeds=1
+S_core versus B3_replay [exploratory] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_replay: seeds not marked confirmatory; B3_replay: selection counts fell back to fractions)
+  acq_direct: -0.200 CI[-0.267, -0.140] seeds=1
+  acq_reverse: -0.375 CI[-0.488, -0.262] seeds=1
+  acq_alias: +0.033 CI[-0.053, +0.120] seeds=1
+  acq_twohop: +0.038 CI[+0.000, +0.087] seeds=1
+  supersede: -0.067 CI[-0.200, +0.000] seeds=1
+  ret_real: +0.367 CI[+0.310, +0.427] seeds=1
+  stale: +0.067 CI[+0.000, +0.200] seeds=1
+  taught_value_bleed: -0.073 CI[-0.113, -0.033] seeds=1
+  false_recall_any_specific: +0.000 CI[+0.000, +0.000] seeds=1
+  drift_generic: -3.765 CI[-4.019, -3.513] seeds=1
+
+Validity (acceptance, unscored fraction, integrate count, budget spent)
+arm | seeds | acceptance | unscored | gate_rate | chains_per_night | integrate_per_night | spent_fraction | unspent_per_night | control_drop
+--- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_pairs | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 0.000 | 1.000 | 174.000 | -
+B3_replay | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 1.000 | 106.000 | -
+B4_replay_kl | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 1.000 | 304.000 | -
+S_core | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 240.333 | 0.995 | 4772.000 | -
+
+Anchor drift increase per night, nats per token (E1 sets max_anchor_drift from this)
+arm | nights | min | median | p90 | max
+--- | --- | --- | --- | --- | ---
+S_core | 3 | -0.011 | 0.056 | 0.184 | 0.184
+
+Hypotheses
+  H2_reverse: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_alias: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_twohop: not supported [exploratory] p_holm=1.000 diff=-0.013 CI[-0.113, +0.075] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  H3: withdrawn [exploratory] (A2.1: withdrawn unless E0b restores selection)
+  H4: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H5: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H6: missing [exploratory] p_holm=1.000 (only 1 seeds; 5 are needed; B3_replay: seeds not marked confirmatory; B3_replay: selection counts fell back to fractions; S_core: seeds not marked confirmatory)
+  H7: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H2: missing [exploratory] (all three H2 members must hold)
+  H8: not measured [exploratory] only 7 facts would have retired; 20 needed (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H9: not measured [exploratory] (needs a same-night conflict world)
+
+H8's log for S_core, per seed and night: gap vs. correctness, and change against the controls
+seed | night | taught | tonight | controls | auroc_probe | auroc_heldout | auroc_probe_before | within_fact_auroc | within_fact_auroc_heldout | gap_vs_correct_change | mean_gap_change | control_mean_gap_change | mean_correct_before | mean_correct_after | control_correct_before | control_correct_after | regression_slope | control_regression_slope | taught_net_of_control
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+7 | 0 | 49 | 49 | 40 | 0.583 | 0.429 | - | 0.854 | 0.286 | -0.144 | -2.656 | -1.884 | 0.000 | 0.980 | 0.000 | 0.050 | -0.958 | -0.994 | -0.777
+7 | 1 | 97 | 53 | 40 | 0.685 | 0.584 | 1.000 | 0.597 | 0.708 | -0.106 | -0.757 | -0.207 | 0.019 | 0.868 | 0.050 | 0.100 | -0.777 | -0.551 | -0.391
+7 | 2 | 150 | 59 | 40 | 0.766 | 0.606 | - | 0.376 | 0.583 | 0.172 | -0.567 | -0.025 | 0.000 | 0.729 | 0.100 | 0.125 | -0.796 | -0.284 | -0.416
+
+Arms at the final night (means over seeds)
+arm | seeds | acq_direct | acq_direct_lift | acq_reverse | acq_reverse_lift | acq_alias | acq_alias_lift | acq_twohop | acq_twohop_lift | acq_implied | supersede | stale | preservation | taught_value_bleed | false_recall_any_specific | false_recall_neighbour | ret_real | ret_real_head | ret_real_tail | drift_generic | delta_norm | delta_rank | style_length | style_artefact
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_pairs | 1 | 0.140 | 0.140 | 1.000 | 1.000 | 0.020 | 0.013 | 0.000 | 0.000 | 0.340 | 0.333 | 0.000 | 0.145 | 0.213 | 1.000 | 0.193 | 0.000 | 0.000 | 0.000 | 8.753 | 31.581 | 16124.000 | 6.033 | 0.000
+B3_replay | 1 | 1.000 | 1.000 | 1.000 | 1.000 | 0.100 | 0.027 | 0.037 | -0.050 | 0.379 | 1.000 | 0.000 | 1.000 | 1.000 | 1.000 | 0.913 | 0.037 | 0.053 | 0.020 | 4.281 | 31.297 | 16128.000 | 5.096 | 0.000
+B4_replay_kl | 1 | 1.000 | 1.000 | 1.000 | 1.000 | 0.073 | 0.020 | 0.062 | -0.025 | 0.379 | 1.000 | 0.000 | 1.000 | 1.000 | 1.000 | 0.747 | 0.487 | 0.640 | 0.333 | 0.060 | 22.117 | 16128.000 | 5.146 | 0.000
+S_core | 1 | 0.800 | 0.800 | 0.637 | 0.625 | 0.093 | 0.060 | 0.075 | -0.013 | 0.269 | 0.933 | 0.067 | 0.768 | 0.927 | 1.000 | 0.700 | 0.403 | 0.513 | 0.293 | 0.516 | 18.616 | 26707.000 | 7.085 | 0.000
+
+Direct accuracy by fact age, at the final night
+arm | age_0 | age_1 | age_2
+--- | --- | --- | ---
+B3_pairs | 0.175 | 0.135 | 0.160
+B3_replay | 1.000 | 1.000 | 1.000
+B4_replay_kl | 1.000 | 1.000 | 1.000
+S_core | 0.794 | 0.731 | 0.920
+
+Pilot checks: {'best_acq_implied': 0.3791666666666666, 'kill_no_arm_reaches_0.5_implied': True, 'B3_acq_direct': 1.0, 'B3_reaches_0.7_direct': True}
+
+=== Qwen/Qwen2.5-0.5B/lr3e-4_t2m ===
+S_core versus B3_pairs [exploratory] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  acq_direct: +0.173 CI[+0.073, +0.267] seeds=1
+  acq_reverse: -0.412 CI[-0.512, -0.312] seeds=1
+  acq_alias: +0.060 CI[+0.007, +0.120] seeds=1
+  acq_twohop: -0.012 CI[-0.087, +0.062] seeds=1
+  supersede: +0.133 CI[-0.267, +0.533] seeds=1
+  ret_real: +0.303 CI[+0.253, +0.353] seeds=1
+  stale: +0.133 CI[+0.000, +0.333] seeds=1
+  taught_value_bleed: +0.300 CI[+0.220, +0.387] seeds=1
+  false_recall_any_specific: +0.000 CI[+0.000, +0.000] seeds=1
+  drift_generic: -8.275 CI[-8.582, -7.977] seeds=1
+S_core versus B3_replay [exploratory] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_replay: seeds not marked confirmatory; B3_replay: selection counts fell back to fractions)
+  acq_direct: +0.580 CI[+0.500, +0.660] seeds=1
+  acq_reverse: -0.412 CI[-0.512, -0.312] seeds=1
+  acq_alias: +0.060 CI[+0.007, +0.113] seeds=1
+  acq_twohop: +0.013 CI[-0.075, +0.088] seeds=1
+  supersede: +0.333 CI[-0.067, +0.667] seeds=1
+  ret_real: +0.303 CI[+0.253, +0.353] seeds=1
+  stale: +0.133 CI[+0.000, +0.333] seeds=1
+  taught_value_bleed: +0.693 CI[+0.613, +0.767] seeds=1
+  false_recall_any_specific: +0.000 CI[+0.000, +0.000] seeds=1
+  drift_generic: -8.251 CI[-8.713, -7.763] seeds=1
+
+Validity (acceptance, unscored fraction, integrate count, budget spent)
+arm | seeds | acceptance | unscored | gate_rate | chains_per_night | integrate_per_night | spent_fraction | unspent_per_night | control_drop
+--- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_pairs | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 0.000 | 1.000 | 315.333 | -
+B3_replay | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 1.000 | 230.000 | -
+B4_replay_kl | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 1.000 | 459.667 | -
+S_core | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 226.000 | 0.997 | 5023.000 | -
+
+Anchor drift increase per night, nats per token (E1 sets max_anchor_drift from this)
+arm | nights | min | median | p90 | max
+--- | --- | --- | --- | --- | ---
+S_core | 3 | -0.107 | -0.045 | 0.235 | 0.235
+
+Hypotheses
+  H2_reverse: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_alias: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_twohop: not supported [exploratory] p_holm=1.000 diff=-0.012 CI[-0.087, +0.062] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  H3: withdrawn [exploratory] (A2.1: withdrawn unless E0b restores selection)
+  H4: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H5: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H6: missing [exploratory] p_holm=1.000 (only 1 seeds; 5 are needed; B3_replay: seeds not marked confirmatory; B3_replay: selection counts fell back to fractions; S_core: seeds not marked confirmatory)
+  H7: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H2: missing [exploratory] (all three H2 members must hold)
+  H8: not measured [exploratory] only 9 facts would have retired; 20 needed (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H9: not measured [exploratory] (needs a same-night conflict world)
+
+H8's log for S_core, per seed and night: gap vs. correctness, and change against the controls
+seed | night | taught | tonight | controls | auroc_probe | auroc_heldout | auroc_probe_before | within_fact_auroc | within_fact_auroc_heldout | gap_vs_correct_change | mean_gap_change | control_mean_gap_change | mean_correct_before | mean_correct_after | control_correct_before | control_correct_after | regression_slope | control_regression_slope | taught_net_of_control
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+7 | 0 | 49 | 49 | 40 | 0.850 | 0.500 | - | 0.528 | 0.286 | -0.031 | -2.629 | -2.007 | 0.000 | 0.918 | 0.000 | 0.050 | -0.997 | -0.979 | -0.627
+7 | 1 | 97 | 53 | 40 | 0.744 | 0.548 | 0.500 | 0.313 | 0.550 | 0.202 | -0.815 | -0.162 | 0.019 | 0.792 | 0.050 | 0.075 | -0.779 | -0.454 | -0.473
+7 | 2 | 150 | 59 | 40 | 0.761 | 0.500 | - | 0.407 | 0.722 | 0.165 | -0.452 | -0.091 | 0.000 | 0.610 | 0.075 | 0.100 | -0.727 | -0.292 | -0.301
+
+Arms at the final night (means over seeds)
+arm | seeds | acq_direct | acq_direct_lift | acq_reverse | acq_reverse_lift | acq_alias | acq_alias_lift | acq_twohop | acq_twohop_lift | acq_implied | supersede | stale | preservation | taught_value_bleed | false_recall_any_specific | false_recall_neighbour | ret_real | ret_real_head | ret_real_tail | drift_generic | delta_norm | delta_rank | style_length | style_artefact
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_pairs | 1 | 0.567 | 0.567 | 1.000 | 1.000 | 0.000 | -0.007 | 0.062 | 0.037 | 0.354 | 0.533 | 0.000 | 0.638 | 0.613 | 1.000 | 0.533 | 0.000 | 0.000 | 0.000 | 8.824 | 44.465 | 16128.000 | 5.867 | 0.000
+B3_replay | 1 | 0.160 | 0.160 | 1.000 | 1.000 | 0.000 | -0.007 | 0.013 | 0.013 | 0.337 | 0.333 | 0.000 | 0.203 | 0.220 | 1.000 | 0.187 | 0.000 | 0.000 | 0.000 | 8.800 | 43.741 | 16127.000 | 6.120 | 0.000
+B4_replay_kl | 1 | 0.993 | 0.993 | 1.000 | 1.000 | 0.073 | 0.013 | 0.062 | -0.037 | 0.379 | 1.000 | 0.000 | 1.000 | 0.987 | 1.000 | 0.867 | 0.510 | 0.647 | 0.373 | 0.075 | 29.555 | 16128.000 | 5.276 | 0.000
+S_core | 1 | 0.740 | 0.740 | 0.588 | 0.588 | 0.087 | 0.053 | 0.087 | 0.025 | 0.254 | 0.733 | 0.133 | 0.739 | 0.913 | 1.000 | 0.733 | 0.303 | 0.400 | 0.207 | 0.549 | 24.170 | 25553.000 | 7.335 | 0.000
+
+Direct accuracy by fact age, at the final night
+arm | age_0 | age_1 | age_2
+--- | --- | --- | ---
+B3_pairs | 0.540 | 0.519 | 0.640
+B3_replay | 0.190 | 0.173 | 0.160
+B4_replay_kl | 0.984 | 1.000 | 1.000
+S_core | 0.651 | 0.731 | 0.860
+
+Pilot checks: {'best_acq_implied': 0.3786111111111111, 'kill_no_arm_reaches_0.5_implied': True, 'B3_acq_direct': 0.16, 'B3_reaches_0.7_direct': False}
+
+=== Qwen/Qwen2.5-0.5B/lr3e-4_t500k ===
+S_core versus B3_pairs [exploratory] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  acq_direct: -0.160 CI[-0.220, -0.107] seeds=1
+  acq_reverse: -0.387 CI[-0.488, -0.287] seeds=1
+  acq_alias: -0.047 CI[-0.133, +0.033] seeds=1
+  acq_twohop: -0.050 CI[-0.125, +0.025] seeds=1
+  supersede: +0.000 CI[+0.000, +0.000] seeds=1
+  ret_real: +0.380 CI[+0.320, +0.443] seeds=1
+  stale: +0.000 CI[+0.000, +0.000] seeds=1
+  taught_value_bleed: -0.027 CI[-0.053, -0.007] seeds=1
+  false_recall_any_specific: +0.000 CI[+0.000, +0.000] seeds=1
+  drift_generic: -2.956 CI[-3.211, -2.706] seeds=1
+S_core versus B3_replay [exploratory] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_replay: seeds not marked confirmatory; B3_replay: selection counts fell back to fractions)
+  acq_direct: -0.160 CI[-0.220, -0.107] seeds=1
+  acq_reverse: -0.387 CI[-0.488, -0.287] seeds=1
+  acq_alias: -0.060 CI[-0.153, +0.027] seeds=1
+  acq_twohop: -0.013 CI[-0.087, +0.062] seeds=1
+  supersede: +0.000 CI[+0.000, +0.000] seeds=1
+  ret_real: +0.400 CI[+0.343, +0.463] seeds=1
+  stale: +0.000 CI[+0.000, +0.000] seeds=1
+  taught_value_bleed: -0.020 CI[-0.047, +0.007] seeds=1
+  false_recall_any_specific: +0.000 CI[+0.000, +0.000] seeds=1
+  drift_generic: -3.137 CI[-3.382, -2.878] seeds=1
+
+Validity (acceptance, unscored fraction, integrate count, budget spent)
+arm | seeds | acceptance | unscored | gate_rate | chains_per_night | integrate_per_night | spent_fraction | unspent_per_night | control_drop
+--- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_pairs | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 0.000 | 1.000 | 243.333 | -
+B3_replay | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 1.000 | 202.000 | -
+B4_replay_kl | 1 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.999 | 475.000 | -
+S_core | 1 | 1.000 | 0.000 | 0.000 | 39.000 | 229.000 | 0.991 | 4440.000 | -
+
+Anchor drift increase per night, nats per token (E1 sets max_anchor_drift from this)
+arm | nights | min | median | p90 | max
+--- | --- | --- | --- | --- | ---
+S_core | 3 | -0.001 | 0.095 | 0.167 | 0.167
+
+Hypotheses
+  H2_reverse: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_alias: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_twohop: not supported [exploratory] p_holm=1.000 diff=-0.050 CI[-0.125, +0.025] (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory; B3_pairs: seeds not marked confirmatory; B3_pairs: selection counts fell back to fractions)
+  H3: withdrawn [exploratory] (A2.1: withdrawn unless E0b restores selection)
+  H4: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H5: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H6: missing [exploratory] p_holm=1.000 (only 1 seeds; 5 are needed; B3_replay: seeds not marked confirmatory; B3_replay: selection counts fell back to fractions; S_core: seeds not marked confirmatory)
+  H7: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H2: missing [exploratory] (all three H2 members must hold)
+  H8: not measured [exploratory] only 6 facts would have retired; 20 needed (only 1 seeds; 5 are needed; S_core: seeds not marked confirmatory)
+  H9: not measured [exploratory] (needs a same-night conflict world)
+
+H8's log for S_core, per seed and night: gap vs. correctness, and change against the controls
+seed | night | taught | tonight | controls | auroc_probe | auroc_heldout | auroc_probe_before | within_fact_auroc | within_fact_auroc_heldout | gap_vs_correct_change | mean_gap_change | control_mean_gap_change | mean_correct_before | mean_correct_after | control_correct_before | control_correct_after | regression_slope | control_regression_slope | taught_net_of_control
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+7 | 0 | 49 | 49 | 40 | 0.553 | 0.577 | - | 0.787 | 0.231 | -0.182 | -2.628 | -1.861 | 0.000 | 0.959 | 0.000 | 0.075 | -0.993 | -0.987 | -0.773
+7 | 1 | 97 | 53 | 40 | 0.836 | 0.357 | 0.865 | 0.489 | - | -0.013 | -0.744 | -0.232 | 0.019 | 0.868 | 0.075 | 0.100 | -0.623 | -0.643 | -0.311
+7 | 2 | 150 | 59 | 40 | 0.838 | 0.484 | - | 0.502 | 0.429 | -0.182 | -0.498 | 0.026 | 0.000 | 0.746 | 0.100 | 0.100 | -0.522 | -0.491 | -0.332
+
+Arms at the final night (means over seeds)
+arm | seeds | acq_direct | acq_direct_lift | acq_reverse | acq_reverse_lift | acq_alias | acq_alias_lift | acq_twohop | acq_twohop_lift | acq_implied | supersede | stale | preservation | taught_value_bleed | false_recall_any_specific | false_recall_neighbour | ret_real | ret_real_head | ret_real_tail | drift_generic | delta_norm | delta_rank | style_length | style_artefact
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B3_pairs | 1 | 1.000 | 1.000 | 1.000 | 1.000 | 0.067 | 0.027 | 0.025 | 0.025 | 0.364 | 1.000 | 0.000 | 1.000 | 1.000 | 1.000 | 0.880 | 0.060 | 0.080 | 0.040 | 3.390 | 22.826 | 16128.000 | 5.163 | 0.000
+B3_replay | 1 | 1.000 | 1.000 | 1.000 | 1.000 | 0.087 | 0.040 | 0.013 | -0.013 | 0.366 | 1.000 | 0.000 | 1.000 | 0.993 | 1.000 | 0.900 | 0.040 | 0.067 | 0.013 | 3.571 | 22.431 | 16128.000 | 5.159 | 0.000
+B4_replay_kl | 1 | 1.000 | 1.000 | 1.000 | 1.000 | 0.080 | 0.033 | 0.000 | 0.000 | 0.360 | 1.000 | 0.000 | 1.000 | 0.987 | 1.000 | 0.793 | 0.453 | 0.607 | 0.300 | 0.048 | 16.654 | 16128.000 | 5.476 | 0.000
+S_core | 1 | 0.840 | 0.840 | 0.613 | 0.613 | 0.060 | -0.020 | 0.062 | -0.025 | 0.245 | 1.000 | 0.000 | 0.797 | 0.973 | 1.000 | 0.853 | 0.440 | 0.580 | 0.300 | 0.434 | 13.689 | 27745.000 | 7.352 | 0.000
+
+Direct accuracy by fact age, at the final night
+arm | age_0 | age_1 | age_2
+--- | --- | --- | ---
+B3_pairs | 1.000 | 1.000 | 1.000
+B3_replay | 1.000 | 1.000 | 1.000
+B4_replay_kl | 1.000 | 1.000 | 1.000
+S_core | 0.778 | 0.865 | 0.940
+
+Pilot checks: {'best_acq_implied': 0.3663888888888888, 'kill_no_arm_reaches_0.5_implied': True, 'B3_acq_direct': 1.0, 'B3_reaches_0.7_direct': True}

@@ -15,11 +15,11 @@ Resume point for the coordinator. Update at every phase boundary.
 - [done] Theory draft 1, pre-registration, design spec (`docs/THEORY.md`, `PREREG.md`, `DESIGN.md`).
 - [done] IMPL-A core, IMPL-B benchmark, eval, runner, CI.
 - [done] Independent review (`docs/REVIEW_1.md`); all CRITICAL and HIGH fixed; PREREG Amendment 1. CI: 398 passed.
-- [in progress] Real-model smoke via GitHub Actions. Tag `e0-smoke-N` triggers it, `e0-run-N` runs E0, models in `configs/e0_models.txt`. Results as run artifacts.
-- [next] E0 proper, then decide model and whether the control layer survives.
-- [next] E1 onward need a GPU: Colab or Kaggle.
+- GPU run: `scripts/gpu_run.sh` with tag `gpu-ready`; user rents and runs it, and uploads results.tar.gz.
+- [done] E0 on 4 models, E0b, E1 (one seed, 3 nights). See docs/results/. Selection abandoned; E1 kill rule fired; operating point not bracketed.
+- [next] E1b per PREREG Amendment 3. Then E3.
 
 ## Blockers
-- Kaggle MCP needs the user's sign-in via /mcp; not required while Colab works.
-- Colab connection untested until code is ready. It may need the user's browser. If unavailable, code still ships and experiments wait.
-- Private repo: don't place a GitHub token in a notebook. Send the code to Colab as a tarball in a cell.
+
+
+

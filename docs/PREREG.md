@@ -143,6 +143,32 @@ Observed: own-episode positives in the deployed test include generated questions
 
 **A2.5 Readings.** H6 and H8 are measured on `S_core`. E1 runs with rollback disabled (`max_anchor_drift` at 1e9), because E1 exists to calibrate that limit from the drift distribution; `S_core` nights are all accepted there, and E1's numbers on rollback mean nothing. E1 uses `S_core`, not `S_full`. `CHD_mix` runs at k = 2 in E0b, since k = 4 exceeds the cost cap. `B0_frozen` and `B1_rag` run once per seed, since they train nothing.
 
+## Amendment 3 (2026-11-04, after E1 and E0b; written before E1b)
+
+Results in `docs/results/E1.md`. E1 is pilot data on dev seed 7. Nothing here is confirmatory, and confirmatory seeds are untouched.
+
+**A3.1 Rulings.** Selection is abandoned (E0b failed; A2.3). E1's kill rule fired (no arm reaches 0.5 `acq_implied`), so per its text the data builder is revisited before scaling. E2 and E3 don't run until E1b completes.
+
+**A3.2 E1b: find the operating point, and diagnose.** E1 never bracketed it. Same world, seed 7. Settings: lr {1e-5, 3e-5, 1e-4} × tokens per night {50k, 150k}. `B0_frozen` and `B1_rag` from E1 stand. Arms:
+- `B3_pairs`, `B4_replay_kl`, `S_core` as before.
+- **`S_oracleq`** (exists). Tests whether query quality, rather than the mechanism, limits composition via the teacher.
+- **`B3_derived`** (new). Hard labels include true alias and two-hop statements, in training templates. An upper bound: can these weights hold composed facts when told them outright? Oracle data, benchmark only.
+- **`B4q`** (new). `B4` with KL on self-sampled text that starts from the question frame at germline, not unconditional text.
+- **`S_coreq`** (new). `S_core` plus the same question-frame anchors.
+
+**A3.3 New hypothesis, H10 (frame interference).** Damage to real knowledge is frame-specific, so anchors in the question frame protect it where generic anchors don't. **Prediction:** at matched settings, `B4q` beats `B4_replay_kl` on `ret_real` and `false_recall_neighbour` by at least 10 points, with `acq_direct` within 5. Stated before E1b; E1b is exploratory; if promising it goes into E3 as a confirmatory hypothesis on untouched seeds. It is oracle-free. Falsified if the gap is under 10 points at all settings where `acq_direct` is at least 0.7.
+
+**A3.4 Which setting advances.** For each arm, the setting with highest `ret_real` subject to `acq_direct` at least 0.7, final night. E2 and E3 use one shared setting: the one maximising the minimum `ret_real` across `B3_pairs`, `B4_replay_kl`, and the best sleep arm, subject to all of them having `acq_direct` at least 0.7. If no setting reaches 0.7 on all three, the threshold relaxes to the highest common value and that's reported.
+
+**A3.5 Composition branch.**
+- `S_oracleq` composes, `S_core` doesn't: query quality is the limit, so work moves to query generation.
+- `B3_derived` composes, `S_oracleq` doesn't: KL over queries doesn't write composed knowledge; explicit statements do. Sleep's integration stage then writes statements from pair contexts, and `S_core` changes accordingly.
+- Neither composes: this model doesn't store composed facts this way at this budget. Composition is dropped from the headline at this scale and reported as a negative result, with a 1.5B check.
+
+**A3.6 Drift guard.** `drift_generic` is demoted to a diagnostic. It missed a large loss of real knowledge in `B4`. The commit test stays disabled in E1b. Whether to replace it with a question-frame drift measure is decided after E1b.
+
+**A3.7 Audit.** H8 gets its look at E1b's gentler settings. If held-out AUROC stays under 0.75 at the chosen setting, the audit idea is dropped, along with write gate, pressure and retirement, leaving a fixed schedule.
+
 ## Threats accepted
 
 Synthetic facts are not real experience; templated eval could be easier than real use. Results on 1 to 3B models may not transfer up or down (T2 §9). Ten nights is short of deployment timescales. The world generator was written by the same author as the method, so eval templates are fixed and reviewed before any arm runs.

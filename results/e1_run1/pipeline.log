@@ -1,0 +1,95 @@
+[02:14:07] Setting up the environment
+torch 2.15.0+cu132 cuda 13.2
+0 NVIDIA GeForce RTX 3090
+1 NVIDIA GeForce RTX 3090
+2 NVIDIA GeForce RTX 3090
+3 NVIDIA GeForce RTX 3090
+index, name, memory.total [MiB], memory.used [MiB]
+0, NVIDIA GeForce RTX 3090, 24576 MiB, 1 MiB
+1, NVIDIA GeForce RTX 3090, 24576 MiB, 1 MiB
+2, NVIDIA GeForce RTX 3090, 24576 MiB, 1 MiB
+3, NVIDIA GeForce RTX 3090, 24576 MiB, 1 MiB
+overlay         169G  8.7G  161G   6% /
+[02:16:48] 4 GPUs, 2 cells per GPU, 4 threads per cell, git b3c0c75
+[02:16:48] GPU smoke test
+[02:17:48] Smoke test passed
+[02:17:48] E1 starts on slots 0,0,1,1,2,2,3
+[02:17:48] start lr1e-4_t500k__B0_frozen__seed-7 on GPU 0
+[02:25:43] ok lr1e-4_t500k__B0_frozen__seed-7 in 7.9 min; 1/1 done, roughly 0 min left
+[02:25:43] start lr1e-4_t500k__B1_rag__seed-7 on GPU 0
+[02:25:43] start lr1e-4_t500k__B3_replay__seed-7 on GPU 0
+[02:25:43] start lr1e-4_t500k__B3_pairs__seed-7 on GPU 1
+[02:25:43] start lr1e-4_t500k__B4_replay_kl__seed-7 on GPU 1
+[02:25:43] start lr1e-4_t500k__S_core__seed-7 on GPU 2
+[02:25:43] start lr3e-4_t500k__B3_replay__seed-7 on GPU 2
+[02:25:43] start lr3e-4_t500k__B3_pairs__seed-7 on GPU 3
+[02:27:08] ok lr1e-4_t500k__B1_rag__seed-7 in 1.4 min; 1/37 done, roughly 51 min left
+[02:27:13] start lr3e-4_t500k__B4_replay_kl__seed-7 on GPU 0
+[02:32:10] E0b tuning finished
+[02:43:08] ok lr3e-4_t500k__B3_pairs__seed-7 in 17.4 min; 2/37 done, roughly 305 min left
+[02:43:13] start lr3e-4_t500k__S_core__seed-7 on GPU 3
+[02:43:13] ok lr1e-4_t500k__B3_pairs__seed-7 in 17.5 min; 3/37 done, roughly 198 min left
+[02:43:18] start lr1e-3_t500k__B3_replay__seed-7 on GPU 1
+[02:43:33] ok lr1e-4_t500k__B3_replay__seed-7 in 17.8 min; 4/37 done, roughly 147 min left
+[02:43:33] ok lr3e-4_t500k__B3_replay__seed-7 in 17.8 min; 5/37 done, roughly 114 min left
+[02:43:38] start lr1e-3_t500k__B3_pairs__seed-7 on GPU 0
+[02:43:38] start lr1e-3_t500k__B4_replay_kl__seed-7 on GPU 2
+[02:46:01] E0b finished
+[02:51:58] ok lr1e-4_t500k__B4_replay_kl__seed-7 in 26.3 min; 6/37 done, roughly 136 min left
+[02:52:03] start lr1e-3_t500k__S_core__seed-7 on GPU 1
+[02:53:33] ok lr3e-4_t500k__B4_replay_kl__seed-7 in 26.3 min; 7/37 done, roughly 119 min left
+[02:53:38] start lr1e-4_t1m__B3_replay__seed-7 on GPU 0
+[03:00:53] ok lr1e-3_t500k__B3_pairs__seed-7 in 17.3 min; 8/37 done, roughly 127 min left
+[03:00:58] start lr1e-4_t1m__B3_pairs__seed-7 on GPU 0
+[03:01:08] ok lr1e-3_t500k__B3_replay__seed-7 in 17.8 min; 9/37 done, roughly 110 min left
+[03:01:13] start lr1e-4_t1m__B4_replay_kl__seed-7 on GPU 1
+[03:09:53] ok lr1e-3_t500k__B4_replay_kl__seed-7 in 26.3 min; 10/37 done, roughly 119 min left
+[03:09:58] start lr1e-4_t1m__S_core__seed-7 on GPU 2
+[03:23:43] ok lr1e-4_t500k__S_core__seed-7 in 58.0 min; 11/37 done, roughly 137 min left
+[03:23:48] start lr3e-4_t1m__B3_replay__seed-7 on GPU 2
+[03:27:28] ok lr1e-3_t500k__S_core__seed-7 in 35.4 min; 12/37 done, roughly 129 min left
+[03:27:33] start lr3e-4_t1m__B3_pairs__seed-7 on GPU 1
+[03:28:28] ok lr1e-4_t1m__B3_replay__seed-7 in 34.8 min; 13/37 done, roughly 116 min left
+[03:28:33] start lr3e-4_t1m__B4_replay_kl__seed-7 on GPU 0
+[03:34:33] ok lr1e-4_t1m__B3_pairs__seed-7 in 33.6 min; 14/37 done, roughly 113 min left
+[03:34:38] start lr3e-4_t1m__S_core__seed-7 on GPU 0
+[03:37:53] ok lr3e-4_t500k__S_core__seed-7 in 54.7 min; 15/37 done, roughly 106 min left
+[03:37:58] start lr1e-3_t1m__B3_replay__seed-7 on GPU 3
+[03:52:03] ok lr1e-4_t1m__B4_replay_kl__seed-7 in 50.8 min; 16/37 done, roughly 113 min left
+[03:52:08] start lr1e-3_t1m__B3_pairs__seed-7 on GPU 1
+[03:58:23] ok lr3e-4_t1m__B3_replay__seed-7 in 34.6 min; 17/37 done, roughly 109 min left
+[03:58:28] start lr1e-3_t1m__B4_replay_kl__seed-7 on GPU 2
+[04:00:53] ok lr3e-4_t1m__B3_pairs__seed-7 in 33.3 min; 18/37 done, roughly 100 min left
+[04:00:58] start lr1e-3_t1m__S_core__seed-7 on GPU 1
+[04:12:08] ok lr1e-3_t1m__B3_replay__seed-7 in 34.2 min; 19/37 done, roughly 101 min left
+[04:12:13] start lr1e-4_t2m__B3_replay__seed-7 on GPU 3
+[04:14:08] ok lr1e-4_t1m__S_core__seed-7 in 64.2 min; 20/37 done, roughly 92 min left
+[04:14:13] start lr1e-4_t2m__B3_pairs__seed-7 on GPU 2
+[04:19:23] ok lr3e-4_t1m__B4_replay_kl__seed-7 in 50.8 min; 21/37 done, roughly 87 min left
+[04:19:28] start lr1e-4_t2m__B4_replay_kl__seed-7 on GPU 0
+[04:25:28] ok lr1e-3_t1m__B3_pairs__seed-7 in 33.3 min; 22/37 done, roughly 82 min left
+[04:25:33] start lr1e-4_t2m__S_core__seed-7 on GPU 1
+[04:34:43] ok lr3e-4_t1m__S_core__seed-7 in 60.1 min; 23/37 done, roughly 79 min left
+[04:34:48] start lr3e-4_t2m__B3_replay__seed-7 on GPU 0
+[04:49:18] ok lr1e-3_t1m__B4_replay_kl__seed-7 in 50.8 min; 24/37 done, roughly 78 min left
+[04:49:23] start lr3e-4_t2m__B3_pairs__seed-7 on GPU 2
+[04:53:33] ok lr1e-3_t1m__S_core__seed-7 in 52.6 min; 25/37 done, roughly 71 min left
+[04:53:38] start lr3e-4_t2m__B4_replay_kl__seed-7 on GPU 1
+[05:19:18] ok lr1e-4_t2m__B3_replay__seed-7 in 67.1 min; 26/37 done, roughly 73 min left
+[05:19:23] start lr3e-4_t2m__S_core__seed-7 on GPU 3
+[05:19:28] ok lr1e-4_t2m__B3_pairs__seed-7 in 65.3 min; 27/37 done, roughly 64 min left
+[05:19:33] start lr1e-3_t2m__B3_replay__seed-7 on GPU 2
+[05:41:48] ok lr1e-4_t2m__S_core__seed-7 in 76.3 min; 28/37 done, roughly 63 min left
+[05:41:53] start lr1e-3_t2m__B3_pairs__seed-7 on GPU 1
+[05:42:28] ok lr3e-4_t2m__B3_replay__seed-7 in 67.7 min; 29/37 done, roughly 54 min left
+[05:42:33] start lr1e-3_t2m__B4_replay_kl__seed-7 on GPU 0
+[05:54:53] ok lr3e-4_t2m__B3_pairs__seed-7 in 65.5 min; 30/37 done, roughly 49 min left
+[05:54:59] start lr1e-3_t2m__S_core__seed-7 on GPU 2
+[05:58:44] ok lr1e-4_t2m__B4_replay_kl__seed-7 in 99.3 min; 31/37 done, roughly 41 min left
+[06:27:14] ok lr1e-3_t2m__B3_replay__seed-7 in 67.7 min; 32/37 done, roughly 38 min left
+[06:30:44] ok lr3e-4_t2m__S_core__seed-7 in 71.3 min; 33/37 done, roughly 30 min left
+[06:33:04] ok lr3e-4_t2m__B4_replay_kl__seed-7 in 99.4 min; 34/37 done, roughly 22 min left
+[06:45:39] ok lr1e-3_t2m__B3_pairs__seed-7 in 63.8 min; 35/37 done, roughly 15 min left
+[06:54:19] ok lr1e-3_t2m__S_core__seed-7 in 59.3 min; 36/37 done, roughly 7 min left
+[07:21:14] ok lr1e-3_t2m__B4_replay_kl__seed-7 in 98.7 min; 37/37 done, roughly 0 min left
+[07:21:14] E1 scheduler exited with 0. Waiting for E0b.
