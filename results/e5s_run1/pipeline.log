@@ -1,0 +1,40 @@
+[14:14:38] Setting up the environment
+torch 2.15.0+cu132 built for cuda 13.2 torch.cuda.is_available() True
+allocation and matmul on cuda:0 passed
+torch 2.15.0+cu132 cuda 13.2
+0 NVIDIA GeForce RTX 5090
+index, name, memory.total [MiB], memory.used [MiB]
+0, NVIDIA GeForce RTX 5090, 32607 MiB, 2 MiB
+overlay         115G  8.7G  107G   8% /
+[14:16:37] PER_GPU=3, from the environment
+[14:16:37] THREADS=85, computed: max(2, 256 CPUs / 3 slots)
+[14:16:37] Stage e5s, 1 GPUs, 3 cells per GPU, 85 threads per cell, git 6131efe
+[14:16:37] GPU smoke test
+[14:17:44] Smoke test passed
+[14:17:44] E0b skipped: results/e0b/e0b_confirm.json is committed, and A2.3 allows one test. Every slot goes to the stage.
+[14:17:44] e5s starts on slots 0,0,0
+[14:17:44] start learn__B0_frozen__seed-3001 on GPU 0
+[14:20:14] ok learn__B0_frozen__seed-3001 in 2.5 min; 1/1 done, roughly 0 min left
+[14:20:14] start learn__B0_frozen__seed-3002 on GPU 0
+[14:20:14] start learn__B0_frozen__seed-3003 on GPU 0
+[14:20:14] start learn__B4_replay_kl__seed-3001 on GPU 0
+[14:21:19] ok learn__B0_frozen__seed-3002 in 1.1 min; 1/11 done, roughly 11 min left
+[14:21:19] ok learn__B0_frozen__seed-3003 in 1.1 min; 2/11 done, roughly 5 min left
+[14:21:24] start learn__B4q__seed-3001 on GPU 0
+[14:21:24] start learn__B4qd__seed-3001 on GPU 0
+[14:33:54] ok learn__B4_replay_kl__seed-3001 in 13.7 min; 3/11 done, roughly 36 min left
+[14:33:59] start learn__B4_replay_kl__seed-3002 on GPU 0
+[14:38:44] ok learn__B4q__seed-3001 in 17.3 min; 4/11 done, roughly 32 min left
+[14:38:49] start learn__B4q__seed-3002 on GPU 0
+[14:38:54] ok learn__B4qd__seed-3001 in 17.5 min; 5/11 done, roughly 22 min left
+[14:38:59] start learn__B4qd__seed-3002 on GPU 0
+[14:47:05] ok learn__B4_replay_kl__seed-3002 in 13.1 min; 6/11 done, roughly 22 min left
+[14:47:10] start learn__B4_replay_kl__seed-3003 on GPU 0
+[14:56:10] ok learn__B4q__seed-3002 in 17.3 min; 7/11 done, roughly 21 min left
+[14:56:15] start learn__B4q__seed-3003 on GPU 0
+[14:56:45] ok learn__B4qd__seed-3002 in 17.8 min; 8/11 done, roughly 14 min left
+[14:56:50] start learn__B4qd__seed-3003 on GPU 0
+[14:59:50] ok learn__B4_replay_kl__seed-3003 in 12.7 min; 9/11 done, roughly 9 min left
+[15:11:15] ok learn__B4q__seed-3003 in 15.0 min; 10/11 done, roughly 5 min left
+[15:11:40] ok learn__B4qd__seed-3003 in 14.8 min; 11/11 done, roughly 0 min left
+[15:11:40] e5s scheduler exited with 0

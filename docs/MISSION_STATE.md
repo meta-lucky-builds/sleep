@@ -18,7 +18,8 @@ Resume point for the coordinator. Update at every phase boundary.
 - GPU run: `scripts/gpu_run.sh` with tag `gpu-ready`; user rents and runs it, and uploads results.tar.gz.
 - [done] E0 on 4 models, E0b, E1 (one seed, 3 nights). See docs/results/. Selection abandoned; E1 kill rule fired; operating point not bracketed.
 - [done] E1b and partial E3x. See docs/results/E1b_E3x.md. Audit dropped; S_core losing; question-frame anchors promising, unproven at real learning.
-- [next] E5 per PREREG Amendment 5, once the user agrees to stop E3x.
+- [done] Toy 1 and E5s on one RTX 5090. See docs/results/E5s.md. H10 and H14 passed, exploratory. False recall on look-alikes unsolved and rising.
+- [next] Explain non-finite steps and 23% GPU use, build the model-written form of `B4qd`, then E6 per PREREG Amendment 6. E6 needs a GPU the user rents.
 
 ## Blockers
 

@@ -1,0 +1,69 @@
+
+=== Qwen/Qwen2.5-0.5B/learn ===
+S_core versus B3_pairs [exploratory] (only 0 seeds; 5 are needed)
+  acq_direct: not available
+  acq_reverse: not available
+  acq_alias: not available
+  acq_twohop: not available
+  supersede: not available
+  ret_real: not available
+  stale: not available
+  taught_value_bleed: not available
+  false_recall_any_specific: not available
+  drift_generic: not available
+S_core versus B3_replay [exploratory] (only 0 seeds; 5 are needed)
+  acq_direct: not available
+  acq_reverse: not available
+  acq_alias: not available
+  acq_twohop: not available
+  supersede: not available
+  ret_real: not available
+  stale: not available
+  taught_value_bleed: not available
+  false_recall_any_specific: not available
+  drift_generic: not available
+
+Validity (acceptance, unscored fraction, integrate count, budget spent)
+arm | seeds | acceptance | unscored | gate_rate | chains_per_night | integrate_per_night | spent_fraction | unspent_per_night | control_drop
+--- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B0_frozen | 3 | - | - | - | - | - | 0.000 | 250000.000 | -
+B4_replay_kl | 3 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.999 | 341.333 | -
+B4q | 3 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.999 | 340.667 | -
+B4qd | 3 | 1.000 | 0.000 | 0.000 | - | 0.000 | 0.999 | 354.000 | -
+
+Anchor drift increase per night, nats per token (E1 sets max_anchor_drift from this)
+(no arms)
+
+Hypotheses
+  H2_reverse: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_alias: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed; B4_replay_kl: seeds not marked confirmatory; B4_replay_kl: selection counts fell back to fractions)
+  H2_twohop: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed)
+  H3: withdrawn [exploratory] (A2.1: withdrawn unless E0b restores selection)
+  H4: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed)
+  H5: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed)
+  H6: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed)
+  H7: missing [exploratory] p_holm=1.000 (only 0 seeds; 5 are needed)
+  H2: missing [exploratory] (all three H2 members must hold)
+  H8: missing [exploratory] (only 0 seeds; 5 are needed)
+  H9: not measured [exploratory] (needs a same-night conflict world)
+
+H8's log for S_core, per seed and night: gap vs. correctness, and change against the controls
+(no arms)
+
+Arms at the final night (means over seeds)
+arm | seeds | acq_direct | acq_direct_lift | acq_reverse | acq_reverse_lift | acq_alias | acq_alias_lift | acq_twohop | acq_twohop_lift | acq_implied | supersede | stale | preservation | taught_value_bleed | false_recall_any_specific | false_recall_neighbour | ret_real | ret_real_head | ret_real_tail | drift_generic | delta_norm | delta_rank | style_length | style_artefact
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+B0_frozen | 3 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | -0.006 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.128 | 1.000 | 0.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 | 0.000 | 19.830 | 0.000
+B4_replay_kl | 3 | 0.994 | 0.994 | 1.000 | 1.000 | 0.172 | 0.094 | 0.073 | 0.052 | 0.415 | 1.000 | 0.000 | 1.000 | 0.989 | 1.000 | 0.750 | 0.470 | 0.627 | 0.313 | 0.046 | 10.557 | 10752.000 | 5.071 | 0.000
+B4q | 3 | 0.889 | 0.889 | 0.948 | 0.948 | 0.139 | 0.033 | 0.135 | 0.094 | 0.407 | 0.867 | 0.067 | 0.947 | 0.983 | 1.000 | 0.717 | 0.733 | 0.880 | 0.587 | 0.228 | 10.277 | 10752.000 | 5.268 | 0.000
+B4qd | 3 | 0.989 | 0.989 | 0.917 | 0.917 | 0.889 | 0.867 | 0.583 | 0.573 | 0.796 | 1.000 | 0.000 | 1.000 | 0.978 | 0.994 | 0.800 | 0.727 | 0.873 | 0.580 | 0.242 | 10.144 | 10752.000 | 5.281 | 0.000
+
+Direct accuracy by fact age, at the final night
+arm | age_0 | age_1
+--- | --- | ---
+B0_frozen | 0.000 | 0.000
+B4_replay_kl | 1.000 | 0.988
+B4q | 0.842 | 0.951
+B4qd | 0.982 | 1.000
+
+Pilot checks: {'best_acq_implied': 0.7962962962962963, 'kill_no_arm_reaches_0.5_implied': False, 'B3_acq_direct': None, 'B3_reaches_0.7_direct': False}

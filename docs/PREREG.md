@@ -204,6 +204,16 @@ Results in `docs/results/E1b_E3x.md`.
 
 **A5.6 If H10 holds,** a confirmatory ten-night run on seeds 1001 to 1005, at a pre-stated setting, is justified. If not, the honest conclusion is that nothing tested beats the replay-plus-KL trade-off at this scale.
 
+## Amendment 6 (2026-11-04, after E5s; written before any ten-night run on seeds 1001 to 1005)
+
+**A6.1 Rulings.** E5s passed H10 and H14 as stated in `docs/results/toy1.md`; see `docs/results/E5s.md`. Both remain exploratory. E5s departed from A5.2: one setting, not a grid; 2 nights, not 3; no near-zero control.
+
+**A6.2 Ten-night confirmatory run (E6).** As A5.6 allows. Seeds 1001 to 1005, ten nights, E5s's world and settings: lr 3e-4, 250k tokens per night. Arms: `B0_frozen`, `B4_replay_kl`, `B4q`, and `B4q` at near-zero learning. H10 on the final night: `B4q` minus `B4_replay_kl` on `ret_real` at least 10 points, CI over 5 seeds excluding zero, with `acq_direct` at least 0.7 in both. If `B4q` can't hold 0.7 at this budget, H10 fails at this setting, and any later setting is exploratory. `drift_generic` and `false_recall_neighbour` are reported beside it.
+
+**A6.3 Not confirmatory.** `B4qd` and any model-written form of it can run alongside, on the same seeds, marked exploratory. H14 used oracle statements, so it can't support a claim that a model composes facts on its own.
+
+**A6.4 Before E6.** Explain the non-finite steps and the 23% GPU use seen in E5s. A numerics fix is a code change made before E6's data, and is recorded here if made.
+
 ## Threats accepted
 
 Synthetic facts are not real experience; templated eval could be easier than real use. Results on 1 to 3B models may not transfer up or down (T2 §9). Ten nights is short of deployment timescales. The world generator was written by the same author as the method, so eval templates are fixed and reviewed before any arm runs.
