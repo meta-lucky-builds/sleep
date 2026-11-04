@@ -318,7 +318,7 @@ def _load(path):
 
 
 def test_every_experiment_has_a_config():
-    assert {p.stem for p in ALL_CONFIGS} == {f"e{i}" for i in range(7)} | {"e0b", "e1b", "e3x.template"}
+    assert {p.stem for p in ALL_CONFIGS} == {f"e{i}" for i in range(7)} | {"e0b", "e1b", "e3x.template", "e5s", "toy_e5"}
 
 
 @pytest.mark.parametrize("path", ALL_CONFIGS, ids=lambda p: p.stem)

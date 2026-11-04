@@ -64,6 +64,7 @@ PREREG_ARMS = {
     "B4_replay_kl",
     "B3_derived",
     "B4q",
+    "B4qd",
     "B4q_idk",
     "B4q_compact",
     "B4q_r8",
