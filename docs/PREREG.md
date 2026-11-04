@@ -181,6 +181,8 @@ E1b's numbers are exploratory, single-seed; these are prompts for E3x, not findi
 
 **A4.3 Cheaper evaluation in E1b and E3x.** Probes per kind 60, real questions 150, audit log only on `S_core`. Metric definitions are unchanged, but with fewer items, so CIs widen. E1's numbers remain comparable, with that caveat.
 
+**A4.4 Budget tier.** E1b adds lr {1e-5, 3e-5} at 400k tokens per night, so 8 settings and 80 cells, because at 50k and 150k `S_core` gets far fewer training steps than `B3`, and could fail through undertraining alone. Query synthesis shares are set separately for these small budgets, in the E1b and E3x configs.
+
 ## Threats accepted
 
 Synthetic facts are not real experience; templated eval could be easier than real use. Results on 1 to 3B models may not transfer up or down (T2 §9). Ten nights is short of deployment timescales. The world generator was written by the same author as the method, so eval templates are fixed and reviewed before any arm runs.

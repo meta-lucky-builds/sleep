@@ -228,7 +228,8 @@ def build_question_frame_targets(
     try:
         with handle.banks("germline"):
             while most_attempts is None or attempted < most_attempts:
-                n = min(handle.batch_size, _FRAME_DRAW)
+                # The first draw is small: it measures the cost, and one too big for the room would lose every anchor.
+                n = min(handle.batch_size, _FRAME_DRAW) if cost is not None else min(handle.batch_size, 2)
                 if cfg.self_samples is not None:
                     n = min(n, cfg.self_samples - len(targets))
                 room = handle.ledger.room()

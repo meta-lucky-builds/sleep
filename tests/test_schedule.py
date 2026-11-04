@@ -176,7 +176,7 @@ def test_slots_are_round_robin():
 def test_torch_must_really_work_on_the_gpu_before_the_smoke_test_with_a_fallback_wheel():
     text = _gpu_run()
     check, fallback, again = text.index("if ! cuda_works; then"), text.index('"torch==2.14.1" --index-url https://download.pytorch.org/whl/cu130'), text.index("cuda_works || stop")
-    assert check < fallback < again < text.index("GPU smoke test")
+    assert check < fallback < again < text.index('say "GPU smoke test"')
     assert "torch.cuda.is_available()" in text and "x @ x" in text and 'device="cuda:0"' in text
 
 
@@ -221,14 +221,14 @@ def test_archives_and_the_gpu_log_are_written_in_the_background():
     assert "gpu_util.log" in text and "'*.log'" in text  # The archive's pattern takes it in.
 
 
-def test_e1b_is_the_sixty_cells_on_e1s_world():
+def test_e1b_is_the_eighty_cells_on_e1s_world():
     e1 = json.loads((ROOT / "configs" / "e1.json").read_text(encoding="utf-8"))
     e1b = json.loads((ROOT / "configs" / "e1b.json").read_text(encoding="utf-8"))
     assert e1b["world"] == e1["world"] and e1b["world_seeds"] == e1["world_seeds"] and e1b["model_ids"] == e1["model_ids"]
     assert e1b["night"]["commit"] == e1["night"]["commit"]
     assert e1b["eval"]["max_per_kind"] == 60 and e1b["capability"]["n_keep"] == 150
     jobs = schedule_module.plan_jobs(e1b)
-    assert len(jobs) == 60 and not {"B0_frozen", "B1_rag"} & {job.arm for job in jobs}
+    assert len(jobs) == 80 and not {"B0_frozen", "B1_rag"} & {job.arm for job in jobs}
     settings = {
         (v["night"]["train"]["lr"], v["night"]["budget"]["night_tokens"]) for v in e1b["variants"]
     }

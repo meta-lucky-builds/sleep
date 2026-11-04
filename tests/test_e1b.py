@@ -178,12 +178,12 @@ def test_an_unmetered_ledger_needs_a_count(tokenizer):
 def test_draws_fit_what_is_left_so_little_is_lost_at_the_end(tokenizer):
     handle = _scripted_handle(tokenizer)
     ledger = handle.ledger
-    ledger.begin_night(6000, {"teacher": 1.0})
+    ledger.begin_night(20000, {"teacher": 1.0})
     cfg = TeacherConfig(self_samples=None, self_max_new_tokens=40, max_new_tokens=20, top_k=4)
     with ledger.stage("teacher"):
         targets, exhausted, _ = build_question_frame_targets(handle, cfg, torch.Generator().manual_seed(1))
     assert targets and not exhausted  # Running out is how a count of None ends.
-    assert ledger.spent("teacher") <= 6000
+    assert ledger.spent("teacher") <= 20000
     per_sequence = len(handle.encode_prompt(handle.format(QUESTION, None))) * 3
     assert ledger.remaining("teacher") < 8 * per_sequence  # Less than one draw of the batch size was left unspent.
 
