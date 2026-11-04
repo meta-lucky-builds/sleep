@@ -232,7 +232,8 @@ def test_e1b_is_the_eighty_cells_on_e1s_world():
     settings = {
         (v["night"]["train"]["lr"], v["night"]["budget"]["night_tokens"]) for v in e1b["variants"]
     }
-    assert settings == {(lr, tokens) for lr in (1e-5, 3e-5, 1e-4) for tokens in (50000, 150000)}
+    grid = {(lr, tokens) for lr in (1e-5, 3e-5, 1e-4) for tokens in (50000, 150000)}
+    assert settings == grid | {(1e-5, 400000), (3e-5, 400000)}  # A4.4.
     assert sum(e1b["night"]["queries"]["synthesis_shares"].values()) == pytest.approx(1.0)
 
 
