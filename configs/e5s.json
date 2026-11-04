@@ -1,0 +1,24 @@
+{
+  "experiment": "e5s",
+  "seed_role": "exploratory",
+  "model_ids": ["Qwen/Qwen2.5-0.5B"],
+  "world_seeds": [3001, 3002, 3003],
+  "arms": ["B0_frozen", "B4_replay_kl", "B4q", "B4qd"],
+  "once_arms": ["B0_frozen"],
+  "drop_finished_weights": true,
+  "world": {"n_persons": 16, "n_orgs": 5, "n_cities": 5, "n_regions": 4, "nights": 2, "supersession_rate": 0.2, "n_distractors": 40, "n_control_persons": 5, "n_entrench": 0},
+  "night": {
+    "model": {"rank": 32, "alpha": 32.0, "batch_size": 64, "fp16": true},
+    "signals": {"k": 4, "max_new_tokens": 16, "chunk": 4},
+    "queries": {"per_episode": 3, "model_samples": 2, "model_max_new_tokens": 64, "max_pairs": 32, "synthesis_shares": {"singles": 0.5, "pairs": 0.3, "anchors": 0.2}},
+    "teacher": {"samples": 2, "max_new_tokens": 16, "top_k": 64, "self_samples": null, "self_max_new_tokens": 32, "frame_share": 0.33, "query_anchor_share": 0.34},
+    "train": {"hard_batch": 8, "kl_batch": 4, "anchor_batch": 4, "gradient_checkpointing": false, "max_steps": null},
+    "compact": {"threshold": 0.01, "max_rank": 256, "repair_steps": 20},
+    "commit": {"max_anchor_drift": 1000000000.0}
+  },
+  "variants": [
+    {"name": "learn", "night": {"train": {"lr": 0.0003}, "budget": {"night_tokens": 250000}}}
+  ],
+  "eval": {"max_new_tokens": 24, "batch_size": 64, "max_per_kind": 60, "drift_tokens": 16},
+  "capability": {"n_candidates": 1500, "n_keep": 100, "k": 8, "max_new_tokens": 24, "batch_size": 64}
+}
