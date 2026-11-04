@@ -1,6 +1,6 @@
 # E1b and partial E3x
 
-Exploratory. E1b: dev seed 7, 3 nights, 80 cells, one seed. E3x: seeds 2001 to 2005, 10 nights, **read while still running**: `B3_pairs` on all 5 seeds; `B4_replay_kl` and `B4q` on 4; `S_core` on 2 to 4 depending on night; `S_coreq` not yet. Git `b1da143`, 4×RTX 5090. Tables: `results/e1b_run1/analysis.txt`. Note: a read-only script parsed these result files on the coordinator's machine; no model or test ran locally.
+Exploratory. E1b: dev seed 7, 3 nights, 80 cells, one seed. E3x: seeds 2001 to 2005, 10 nights, **read while still running**: `B3_pairs` on all 5 seeds; `B4_replay_kl` and `B4q` on 4; `S_core` on 2 to 4 depending on night; `S_coreq` not yet. Git `b1da143`, 4×RTX 5090. Tables for E1b: `results/e1b_run1/analysis.txt`. The E3x numbers come from a partial download whose result files aren't in this repo; only its config is. Note: a read-only script parsed these result files on the coordinator's machine; no model or test ran locally.
 
 ## E3x at night 10 (setting lr 1e-4, 150k tokens per night)
 

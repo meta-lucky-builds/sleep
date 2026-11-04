@@ -214,6 +214,8 @@ Results in `docs/results/E1b_E3x.md`.
 
 **A6.4 Before E6.** Explain the non-finite steps and the 23% GPU use seen in E5s. A numerics fix is a code change made before E6's data, and is recorded here if made.
 
+**A6.5 Corrections (2026-11-05, before any data from the ten-night run).** A6.2 and A6.4 call the ten-night run "E6", but E6 is already the scale check above, with its own `configs/e6.json`. The ten-night run is **E7**; nothing else in A6 changes. A6.1's list of departures from A5.2 was incomplete: E5s also used 16 people instead of E1's 40 and 250k tokens per night instead of 500k or 1M, and it omitted `S_coreq`.
+
 ## Threats accepted
 
 Synthetic facts are not real experience; templated eval could be easier than real use. Results on 1 to 3B models may not transfer up or down (T2 §9). Ten nights is short of deployment timescales. The world generator was written by the same author as the method, so eval templates are fixed and reviewed before any arm runs.

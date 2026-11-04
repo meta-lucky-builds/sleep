@@ -4,7 +4,7 @@ Resume point for the coordinator. Update at every phase boundary.
 
 ## Rules (from the user)
 - Long continuous mission. The user may be away and has authorized autonomous decisions, as long as it's safe.
-- No local tests or model runs, and no CPU toy batches. Write code. Real runs on Colab via MCP. CI on GitHub Actions is unit tests only.
+- No local tests or model runs, and no CPU toy batches unless the user asks for one. Write code. Real runs happen in the cloud. So far that has meant GPUs the user rents (`scripts/gpu_run.sh`) and CPU runs on GitHub Actions (E0, Toy 1), because the Colab MCP connection failed. CI itself is unit tests only.
 - Coordinator plus threads, no swarm. Opus 5.5 for implementation and thinking; Sonnet 5.5 for execution and search; Haiku 5.5 for retrieval. All medium effort. Agents use how-to-think when needed.
 - Commit and push to `feat/sleep-framework` in meta-lucky-builds/sleep. The user had `main` fast-forwarded to it on 2026-11-04 and kept both branches. Update `main` again only when the user asks.
 - After a usage limit, resume automatically.
@@ -19,7 +19,7 @@ Resume point for the coordinator. Update at every phase boundary.
 - [done] E0 on 4 models, E0b, E1 (one seed, 3 nights). See docs/results/. Selection abandoned; E1 kill rule fired; operating point not bracketed.
 - [done] E1b and partial E3x. See docs/results/E1b_E3x.md. Audit dropped; S_core losing; question-frame anchors promising, unproven at real learning.
 - [done] Toy 1 and E5s on one RTX 5090. See docs/results/E5s.md. H10 and H14 passed, exploratory. False recall on look-alikes unsolved and rising.
-- [next] Explain non-finite steps and 23% GPU use, build the model-written form of `B4qd`, then E6 per PREREG Amendment 6. E6 needs a GPU the user rents.
+- [next] Explain non-finite steps and 23% GPU use, build the model-written form of `B4qd`, then the ten-night run (E7) per PREREG Amendment 6. E7 needs a GPU the user rents.
 
 ## Blockers
 

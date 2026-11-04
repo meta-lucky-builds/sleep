@@ -18,7 +18,7 @@ A check, not evidence. Dev seed 41, one night, 8 people, 200k tokens at lr 3e-4,
 
 ## Next: E5s
 
-Smallest test that's still somewhat reliable (user's request, 2026-11-04): 3 new seeds (3001 to 3003), 16 people, 2 nights, 250k tokens per night at lr 3e-4, on a Colab T4. Arms: `B0_frozen`, `B4_replay_kl`, `B4q`, `B4qd`. Stated before any data, from PREREG A5.4 and A5.5, on the final night:
+Smallest test that's still somewhat reliable (user's request, 2026-11-04): 3 new seeds (3001 to 3003), 16 people, 2 nights, 250k tokens per night at lr 3e-4, planned for a Colab T4 (it ran on one RTX 5090; see `E5s.md`). Arms: `B0_frozen`, `B4_replay_kl`, `B4q`, `B4qd`. Stated before any data, from PREREG A5.4 and A5.5, on the final night:
 - H10: `B4q` minus `B4_replay_kl` on `ret_real` at least 10 points, all 3 seeds positive, with `acq_direct` at least 0.7 in both.
 - H14: `B4qd` lift on `acq_alias` and `acq_twohop` at least 0.25 over `B4q`, with `ret_real` within 10 points.
 Exploratory whatever it shows. Seeds 1001 to 1005 stay untouched.

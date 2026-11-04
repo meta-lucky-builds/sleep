@@ -1,5 +1,7 @@
 # Sleep for language models: theory (draft 1)
 
+**Status (2026-11-05): this is the original theory, kept as written apart from citation corrections. Its central bet has since failed.** The signal in section 3 failed its tests (E0, E0b), so selection was abandoned, and the audit, write gate, pressure and retirement were dropped (PREREG A3.7, A5.1). Current results: `docs/results/`.
+
 Draft 0 is in git history (commit `ec2f7a7`), written before the literature came back. This draft states
 what the evidence changed. Source IDs refer to `docs/literature/` (A1, C5...) and `insights.md` (I-n, Sn).
 Original claims here are **Speculative** until an experiment says otherwise.
@@ -11,9 +13,9 @@ Original claims here are **Speculative** until an experiment says otherwise.
 | Consolidation = make closed-book match open-book, and this is the new idea | **Not new.** Snell 2022 onward. Mechanism is solved at 7B+ | C1–C5, A8 |
 | It should work on small models | **In doubt.** SDFT loses to plain fine-tuning at 3B; teacher quality limits it | C5, C4 |
 | Context changes knowledge, so the distribution gap is knowledge | **Wrong as stated.** Unrelated context also moves the distribution; part of "transfer" is teacher behaviour and style | C7, C8, C5, C6 |
-| Teacher-of-yesterday compounds | **Stronger than I assumed.** Continuing from a checkpoint on own outputs amplifies traits; reinitialising removes it. SDPO collapsed in one sequence | 2605.01130, 2607.01763, C4 |
+| Teacher-of-yesterday compounds | **Conditionally.** Continuing from a checkpoint on own outputs reliably amplifies traits under DPO, and reinitialising removes that; under SFT and SDF traits mostly decay or hold. SDPO collapsed in one sequence | 2605.01130, 2607.01763, C4 |
 | Downscaling restores plasticity | **Motive dropped at this scale.** Only LM-scale measure extrapolates to about 1.8T tokens before onset at 1B. A few dozen nights is nowhere near | T3 §1 (Zyphra 2606.24752) |
-| Downscaling has another motive | **Partly supported.** Spectral trimming recovered out-of-domain scores; singular-value clipping claimed to help retention; freeze-and-grow methods grow capacity without bound | 2607.01763, 2608.12332 (ABS), A1, A8 |
+| Downscaling has another motive | **Partly supported.** In one merging test, spectral merging raised some out-of-domain scores and lowered others, with the average nearly unchanged; singular-value clipping claimed to help retention; freeze-and-grow methods grow capacity without bound | 2607.01763, 2608.12332 (ABS), A1, A8 |
 | Self-generated anchors can protect old knowledge | **Supported, single-task.** This is now the baseline to beat | A14, 2610.12602, SSR |
 | Real data must stay in the loop | **Supported; no safe threshold known.** | T3 §3.2, B1 (SRC loses to 0.75% rehearsal) |
 | Reversal and two-hop can be fixed by consolidation | **Conditionally.** Reversal must be written explicitly; composition works only if both facts share a document | T2 findings 3, 4 |
@@ -30,7 +32,7 @@ Original claims here are **Speculative** until an experiment says otherwise.
 3. **Costs that appear only across cycles:** entrenchment, drift compounding, bounded capacity.
 
 Prior art on the control layer (T1 §12): ReSAIL selects steps by JSD between teacher with and without context (top 62.2,
-random 49.7, bottom 40.1, one training seed), so *integration selection by divergence* already has a precedent; GATES gates questions by agreement
+random 49.7, bottom 40.1, over three decoding seeds; training runs not stated), so *integration selection by divergence* already has a precedent; GATES gates questions by agreement
 among document-conditioned rollouts. No distractor-controlled version found. Nothing found on using the gap for consolidation timing, ground-truth-free audit,
 retirement from retrieval, or on same-fact entrenchment. Those nulls come from a bounded search; retirement's rests on one web query. Anchoring to original
 vs. previous checkpoint has no head-to-head found. Kotha and Liang (2603.04964) add a warning for the baselines: replaying generic pretraining-like data
@@ -94,7 +96,7 @@ finding 4). CHD sorts candidates into integration targets, interference anchors,
 Generated queries widen input coverage. Targets come only from a teacher given a real episode. Nothing generated is ever stored as fact.
 
 **Stage 3, anchors: germline by default.** Queries with no overlap with anything consolidated are anchored to `theta_0`, which cannot compound
-across nights (2605.01130: only the re-initialised setting is safe). Queries touching consolidated knowledge use the committed model
+across nights (2605.01130: under DPO, re-initialising removes amplification). Queries touching consolidated knowledge use the committed model
 with the relevant episodes in context.
 
 **Stage 4, compaction.** Add fresh into committed delta and truncate by singular-value thresholding per layer, followed by
