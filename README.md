@@ -44,3 +44,9 @@ python experiments/analyze.py --results runs/e3
 there is no `.git`. Use `--arms` and `--seeds` to split a long experiment across sessions.
 
 Tests run in CI only: `pytest -q`. E0 can also run on CPU in GitHub Actions: [`.github/workflows/e0.yml`](.github/workflows/e0.yml), started by hand, with a `smoke` option for the first real-model checks.
+
+## Related work
+
+- [Language Models Need Sleep](https://arxiv.org/abs/2606.03979) (Behrouz et al., June 2026) proposed wake and sleep phases with consolidation for language models first. The comparison with this repo is in [docs/literature/T1_llm_sleep_prior_art.md](docs/literature/T1_llm_sleep_prior_art.md).
+- [Forgetting in Language Models: Capacity, Optimization, and Self-Generated Replay](https://arxiv.org/abs/2605.26097) (Marek et al., May 2026) uses the model's own samples as replay with a KL term.
+- [Cortex: Consolidating Context into Parametric Memory](https://arxiv.org/abs/2610.20399) (Zhang et al., 14 Oct 2026) uses the model's own prospective queries, close to this repo's own-question anchoring.
